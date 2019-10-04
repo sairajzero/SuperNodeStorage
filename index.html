@@ -22,12 +22,14 @@
     fee: 0.0005,
 
     //Required for Supernode operations
-    supernodes: {} //each supnernode must be stored as floID : {uri:<uri>,pubKey:<publicKey>}
+    supernodes: {}, //each supnernode must be stored as floID : {uri:<uri>,pubKey:<publicKey>}
+    storageList = ["General","RIBC"],
+    defaultStorage = "General"
   }
 </script>
 
-<body>
-  use console
+<body onload="onLoadStartUp()">
+    use console
 
 <script>
     /*!
@@ -4692,7 +4694,6 @@
     };
 </script>
 
-
 <script>
   /* Reactor Event handling */
   if (typeof reactor == "undefined" || !reactor) {
@@ -5375,17 +5376,63 @@
     console.log('Admin Message :',message);
   });
 
-  //Event fired during incoming request
-  reactor.registerEvent('supernode_processRequest');
-  reactor.addEventListener('supernode_processRequest', function (request) {
-    console.log('Request :',request);
-  });
+    //Event fired during incoming request
+    reactor.registerEvent('supernode_processRequest');
+    reactor.addEventListener('supernode_processRequest', function (request) {
+        console.log('Request :', request);
+        try {
+            request = request.split(/ (.+)/);
+            if (floGlobals.storageList.include(request[1]))
+                compactIDB.readAllData(request[1])
+                    .then(result => floSupernode.supernodeClientWS.send(request[0] + JSON.stringify(result)))
+                    .catch(error => console.log(error))
+            else
+                compactIDB.searchData(floGlobals.defaultStorage, (k, v) => { return v.application == request[1] })
+                    .then(result => floSupernode.supernodeClientWS.send(request[0] + JSON.stringify(result)))
+                    .catch(error => console.log(error))
 
-  //Event fired during incoming data
-  reactor.registerEvent('supernode_processData');
-  reactor.addEventListener('supernode_processData', function (data) {
-    console.log('Data :',data);
-  });
+        } catch (error) {
+            console.log(error.message)
+        }
+
+    });
+
+    //Event fired during incoming data
+    reactor.registerEvent('supernode_processData');
+    reactor.addEventListener('supernode_processData', function (data) {
+        console.log('Data :', data);
+        try {
+            data = JSON.parse(data)
+            floSupernode.kBucket.determineClosestSupernode(data.floID).then(result => {
+                if (result[0].floID != myFloID)
+                    return;
+                if (data.floID == floCrypto.getFloIDfromPubkeyHex(data.pubKey) && floCrypto.verifySign(
+                        JSON.stringify(data.data), data.sign, data.pubKey)) {
+                    if (floGlobals.storageList.include(data.application))
+                        compactIDB.addData(data.application, {
+                            floID: data.floID,
+                            message: data.message,
+                            sign: data.sign,
+                            application: data.application,
+                            type: data.type,
+                            comment: data.comment
+                        })
+                    else
+                        compactIDB.addData(floGlobals.defaultStorage, {
+                            floID: data.floID,
+                            message: data.message,
+                            sign: data.sign,
+                            application: data.application,
+                            type: data.type,
+                            comment: data.comment
+                        })
+
+                }
+            })
+        } catch (error) {
+            console.log(error.message);
+        }
+    });
 </script>
 <script>
   /* Compact IndexedDB operations */
@@ -5933,5 +5980,98 @@
     }
   }
 </script>
+
+<script id="SuperNodeStorageScript">
+    function onLoadStartUp() {
+        myPrivKey = prompt("Enter Private Key : ");
+        myPubKey = floCrypto.getPubKeyHex(myPrivKey)
+        myFloID = floCrypto.getFloIDfromPubkeyHex(myPubKey)
+
+        initIndexedDBforSupernode().then(result => {
+            console.log(result)
+            readSupernodeListFromAPI().then(result => {
+                console.log(result)
+                floSupernode.kBucket.launch().then(result => {
+                    console.log(result)
+                    if (myFloID in floGlobals.supernodes) {
+                        var serverPwd = prompt("Enter Server Pass!")
+                        floSupernode.initSupernode(serverPwd, myFloID)
+                            .then(result => console.log(result))
+                            .catch(error => console.log(error))
+                    }
+                })
+            })
+        }).catch(error => console.log(error))
+    }
+    
+    function initIndexedDBforSupernode(){
+        return new Promise((resolve, reject) => {
+            var IndexesList = ["floID","data","sign","application","type","additionData"];
+            var primaryKey = "vectorClock";
+            var obj = {
+                lastTx:{},
+                supernodes:{
+                    options:{keyPath:"floID"},
+                    indexes:{
+                        uri:null,
+                        pubKey:null
+                    }
+                }
+            }
+            for(var i=0;i<storageList.length;i++){
+                obj[storageList[i]] = {
+                    options:{keyPath:primaryKey},
+                    indexes:{}
+                }
+                for(var j=0;j<IndexesList.length;j++)
+                    obj[storageList[i]].indexes[IndexesList[j]] = null;
+            }
+            compactIDB.initDB("SupernodeStorage",obj)
+                .then(result => resolve("Initiated supernode storage"))
+                .catch(error => reject(error));
+        })
+    }
+
+    function readSupernodeListFromAPI(){
+        return new Promise((resolve,reject) => {
+            floBlockchainAPI.readSentDataPattern(floGlobals.adminID,"SuperNode",true)
+                .then(result => {
+                    for(var i=0;i<result.length;i++){
+                        var content = JSON.parse(result[i]).SuperNode;
+                        for(sn in content)
+                            if(!(sn in floGlobals.supernodes))
+                                floGlobals.supernodes[sn] = content[sn]
+                    resolve("Read supernode ")                    
+                    }
+                }).catch(error => reject(error))
+        })
+    }
+
+    function editInternDetails(about,contact){
+        var data = {
+            floID:myFloID,
+            internDetails: {about:about,contact:contact},
+            time:Date.now(),
+        }
+        data.sign = floCrypto.signData(JSON.stringify(data.internDetails)+data.time,myPrivKey)
+
+        floSupernode.sendData(JSON.stringify(data),myFloID)
+            .then(result => console.log(result))
+            .catch(error => console.log(error))
+    }
+    function updateInternDetails(about,contact){
+        var data = {
+            floID:myFloID,
+            internDetails: {about:about,contact:contact},
+            time:Date.now(),
+        }
+        data.sign = floCrypto.signData(JSON.stringify(data.internDetails)+data.time,myPrivKey)
+
+        floSupernode.sendData(JSON.stringify(data),myFloID)
+            .then(result => console.log(result))
+            .catch(error => console.log(error))
+    }
+</script>
+
 </body>
 </html>

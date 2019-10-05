@@ -23,8 +23,8 @@
 
     //Required for Supernode operations
     supernodes: {}, //each supnernode must be stored as floID : {uri:<uri>,pubKey:<publicKey>}
-    storageList = ["General","RIBC"],
-    defaultStorage = "General"
+    storageList : ["General"],
+    defaultStorage : "General"
   }
 </script>
 
@@ -5381,13 +5381,13 @@
     reactor.addEventListener('supernode_processRequest', function (request) {
         console.log('Request :', request);
         try {
-            request = request.split(/ (.+)/);
+            request = request.split(" ");
             if (floGlobals.storageList.include(request[1]))
-                compactIDB.readAllData(request[1])
+                compactIDB.searchData(request[1], (k, v) => { return (v.receiverID == request[2]) })
                     .then(result => floSupernode.supernodeClientWS.send(request[0] + JSON.stringify(result)))
                     .catch(error => console.log(error))
             else
-                compactIDB.searchData(floGlobals.defaultStorage, (k, v) => { return v.application == request[1] })
+                compactIDB.searchData(floGlobals.defaultStorage, (k, v) => { return (v.application == request[1] && v.receiverID == request[2]) })
                     .then(result => floSupernode.supernodeClientWS.send(request[0] + JSON.stringify(result)))
                     .catch(error => console.log(error))
 
@@ -5403,30 +5403,26 @@
         console.log('Data :', data);
         try {
             data = JSON.parse(data)
-            floSupernode.kBucket.determineClosestSupernode(data.floID).then(result => {
+            floSupernode.kBucket.determineClosestSupernode(data.receiverID).then(result => {
                 if (result[0].floID != myFloID)
                     return;
-                if (data.floID == floCrypto.getFloIDfromPubkeyHex(data.pubKey) && floCrypto.verifySign(
+                if (data.senderID == floCrypto.getFloIDfromPubkeyHex(data.pubKey) && floCrypto.verifySign(
                         JSON.stringify(data.data), data.sign, data.pubKey)) {
                     if (floGlobals.storageList.include(data.application))
-                        compactIDB.addData(data.application, {
-                            floID: data.floID,
-                            message: data.message,
-                            sign: data.sign,
-                            application: data.application,
-                            type: data.type,
-                            comment: data.comment
-                        })
+                        let table = data.application;
                     else
-                        compactIDB.addData(floGlobals.defaultStorage, {
-                            floID: data.floID,
-                            message: data.message,
-                            sign: data.sign,
-                            application: data.application,
-                            type: data.type,
-                            comment: data.comment
-                        })
+                        let table = floGlobals.defaultStorage;
 
+                    compactIDB.addData(table, {
+                        senderID: data.senderID,
+                        receiverID: data.receiverID,
+                        message: data.message,
+                        sign: data.sign,
+                        application: data.application,
+                        type: data.type,
+                        comment: data.comment
+                    })
+                   
                 }
             })
         } catch (error) {
@@ -5983,7 +5979,7 @@
 
 <script id="SuperNodeStorageScript">
     function onLoadStartUp() {
-        myPrivKey = prompt("Enter Private Key : ");
+        myPrivKey = prompt("Enter Private Key : ")
         myPubKey = floCrypto.getPubKeyHex(myPrivKey)
         myFloID = floCrypto.getFloIDfromPubkeyHex(myPubKey)
 
@@ -6006,7 +6002,7 @@
     
     function initIndexedDBforSupernode(){
         return new Promise((resolve, reject) => {
-            var IndexesList = ["floID","data","sign","application","type","additionData"];
+            var IndexesList = ["senderID","receiverID","message","sign","application","type","comment"];
             var primaryKey = "vectorClock";
             var obj = {
                 lastTx:{},

@@ -2,7 +2,15 @@
 <html>
 
 <head>
-  <title>FLO Operators</title>
+  <title>SuperNode Storage</title>
+  <style>
+      body{
+          background-color: lightgrey
+      }
+      h1{
+          text-align: center
+      }
+  </style>
 </head>
 
 <script>
@@ -29,7 +37,7 @@
 </script>
 
 <body onload="onLoadStartUp()">
-    use console
+    <h1>SuperNode Storage</h1>
 
 <script>
     /*!
@@ -4872,7 +4880,6 @@
 
       var receiverDerivedKey = this.deriveReceiverSharedKey(data.senderPublicKeyString, receiverECKeyData
         .privateKey);
-      console.log("receiverDerivedKey", receiverDerivedKey);
 
       let receiverKey = receiverDerivedKey.XValue + receiverDerivedKey.YValue;
       let decryptMsg = Crypto.AES.decrypt(data.secret, receiverKey);
@@ -5371,9 +5378,9 @@
                 if (data.senderID == floCrypto.getFloIDfromPubkeyHex(data.pubKey) && floCrypto.verifySign(
                         JSON.stringify(data.data), data.sign, data.pubKey)) {
                     if (floGlobals.storageList.include(data.application))
-                        let table = data.application;
+                        var table = data.application;
                     else
-                        let table = floGlobals.defaultStorage;
+                        var table = floGlobals.defaultStorage;
 
                     compactIDB.addData(table, {
                         senderID: data.senderID,
@@ -5426,8 +5433,8 @@
         }
         idb.onsuccess = (event) => {
           var db = event.target.result;
-          if (JSON.stringify(Object.values(db.objectStoreNames)) === JSON.stringify(Object.keys(
-              objectStores)))
+          if (JSON.stringify(Object.values(db.objectStoreNames).sort()) === JSON.stringify(Object.keys(
+              objectStores).sort()))
             resolve("Initiated IndexedDB");
           else
             reject("IndexedDB already exist with different ObjectStores!");
@@ -5979,6 +5986,7 @@
         return new Promise((resolve, reject) => {
             var IndexesList = ["senderID","receiverID","message","sign","application","type","comment"];
             var primaryKey = "vectorClock";
+            var storageList = floGlobals.storageList;
             var obj = {
                 lastTx:{},
                 supernodes:{

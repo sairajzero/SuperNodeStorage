@@ -5331,6 +5331,9 @@
   reactor.registerEvent('supernode_close');
   reactor.addEventListener('supernode_close', function (event) {
     console.log('Disconnected from supernode websocket!');
+    floSupernode.initSupernode(serverPwd, myFloID)
+        .then(result => console.log(result))
+        .catch(error => console.log(error))
   });
 
   //Event fired when connection error with supernode websocket
@@ -5972,7 +5975,8 @@
                 floSupernode.kBucket.launch().then(result => {
                     console.log(result)
                     if (myFloID in floGlobals.supernodes) {
-                        var serverPwd = prompt("Enter Server Pass!")
+                        serverPwd = prompt("Enter Server Pass!")
+                        setInterval(refreshBlockchainData, 3600000);
                         floSupernode.initSupernode(serverPwd, myFloID)
                             .then(result => console.log(result))
                             .catch(error => console.log(error))
@@ -5981,7 +5985,7 @@
             })
         }).catch(error => console.log(error))
     }
-    
+
     function initIndexedDBforSupernode(){
         return new Promise((resolve, reject) => {
             var IndexesList = ["senderID","receiverID","message","sign","application","type","comment"];
@@ -6005,6 +6009,15 @@
                 .then(result => resolve("Initiated supernode storage"))
                 .catch(error => reject(error));
         })
+    }
+
+    function refreshBlockchainData(){
+        readSupernodeListFromAPI().then(result => {
+            console.log(result)
+            floSupernode.kBucket.launch().then(result => {
+                console.log(result)
+            })
+        }).catch(error => console.log(error))
     }
 
     function readSupernodeListFromAPI(){

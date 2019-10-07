@@ -5388,6 +5388,7 @@
                     compactIDB.addData(table, {
                         senderID: data.senderID,
                         receiverID: data.receiverID,
+                        pubKey: data.pubKey,
                         message: data.message,
                         sign: data.sign,
                         application: data.application,
@@ -5988,7 +5989,7 @@
 
     function initIndexedDBforSupernode(){
         return new Promise((resolve, reject) => {
-            var IndexesList = ["senderID","receiverID","message","sign","application","type","comment"];
+            var IndexesList = ["senderID","receiverID","pubKey","message","sign","application","type","comment"];
             var primaryKey = "vectorClock";
             var storageList = floGlobals.storageList;
             var obj = {

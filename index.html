@@ -5078,8 +5078,7 @@
           reject("Empty Signature");
         else {
           var params = `{"rawtx":"${signedTxHash}"}`;
-          var result;
-          request.open('POST', url, false);
+          request.open('POST', url, true);
           //Send the proper header information along with the request
           request.setRequestHeader('Content-type', 'application/json');
           request.onload = function () {
@@ -5090,7 +5089,6 @@
               reject(request.responseText);
           }
           request.send(params);
-          return result;
         }
       })
     },

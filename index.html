@@ -5353,11 +5353,11 @@
         try {
             request = request.split(" ");
             if (floGlobals.storageList.includes(request[1]))
-                compactIDB.searchData(request[1], (k, v) => { return (v.receiverID == request[2]) })
+                compactIDB.searchData(request[1], (k, v) => { return (k > request[3] && v.application == request[1] && v.receiverID == request[2]) })
                     .then(result => floSupernode.supernodeClientWS.send(`${request[0]} ${JSON.stringify(result)}`))
                     .catch(error => console.log(error))
             else
-                compactIDB.searchData(floGlobals.defaultStorage, (k, v) => { return (v.application == request[1] && v.receiverID == request[2]) })
+                compactIDB.searchData(floGlobals.defaultStorage, (k, v) => { return (k > request[3] && v.application == request[1] && v.receiverID == request[2]) })
                     .then(result => floSupernode.supernodeClientWS.send(`${request[0]} ${JSON.stringify(result)}`))
                     .catch(error => console.log(error))
 

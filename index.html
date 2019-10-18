@@ -5352,13 +5352,15 @@
         console.log('Request :', request);
         try {
             request = request.split(" ");
-            if (floGlobals.storageList.includes(request[1]))
-                compactIDB.searchData(request[1], (k, v) => { return (k > request[3] && v.application == request[1] && v.receiverID == request[2]) })
-                    .then(result => floSupernode.supernodeClientWS.send(`${request[0]} ${JSON.stringify(result)}`))
+            requestor = request[0];
+            request = JSON.parse(request[1]);
+            if (floGlobals.storageList.includes(request.application))
+                compactIDB.searchData(request.application, (k, v) => { return (v.application == request.application && (!request.receiverID || v.receiverID == request.receiverID)  && (!request.type || v.type == request.type)) }, request.vectorClock, request.lastOnly)
+                    .then(result => floSupernode.supernodeClientWS.send(`${requestor} ${JSON.stringify(result)}`))
                     .catch(error => console.log(error))
             else
-                compactIDB.searchData(floGlobals.defaultStorage, (k, v) => { return (k > request[3] && v.application == request[1] && v.receiverID == request[2]) })
-                    .then(result => floSupernode.supernodeClientWS.send(`${request[0]} ${JSON.stringify(result)}`))
+                compactIDB.searchData(floGlobals.defaultStorage, (k, v) => { return (v.application == request.application && (!request.receiverID || v.receiverID == request.receiverID)  && (!request.type || v.type == request.type)) }, request.vectorClock, request.lastOnly)
+                    .then(result => floSupernode.supernodeClientWS.send(`${requestor} ${JSON.stringify(result)}`))
                     .catch(error => console.log(error))
 
         } catch (error) {
@@ -5534,18 +5536,20 @@
       });
     },
 
-    searchData: function (obsName, patternEval, dbName = this.dbName) {
+    searchData: function (obsName, patternEval, startKey = 0, lastOnly = false, dbName = this.dbName) {
       return new Promise((resolve, reject) => {
         this.openDB(dbName).then(db => {
           var obs = db.transaction(obsName, "readonly").objectStore(obsName);
           var filteredResult = {}
-          let curReq = obs.openCursor();
+          let curReq = obs.openCursor(IDBKeyRange.lowerBound(startKey,true), lastOnly ? "prev":"next" );
           curReq.onsuccess = (evt) => {
             var cursor = evt.target.result;
             if (cursor) {
-              if (patternEval(cursor.primaryKey, cursor.value))
+              if (patternEval(cursor.primaryKey, cursor.value)){
                 filteredResult[cursor.primaryKey] = cursor.value;
-              cursor.continue();
+                lastOnly ? resolve(filteredResult) : cursor.continue();
+              }else 
+                cursor.continue();
             } else
               resolve(filteredResult);
           }

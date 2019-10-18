@@ -5355,11 +5355,11 @@
             requestor = request[0];
             request = JSON.parse(request[1]);
             if (floGlobals.storageList.includes(request.application))
-                compactIDB.searchData(request.application, (k, v) => { return (v.application == request.application && (!request.receiverID || v.receiverID == request.receiverID)  && (!request.type || v.type == request.type)) }, request.vectorClock, request.lastOnly)
+                compactIDB.searchData(request.application, (k, v) => { return (v.application == request.application && (!request.receiverID || v.receiverID == request.receiverID)  && (!request.type || v.type == request.type) && (!request.senderIDs || request.senderIDs.includes(v.senderID))) }, request.vectorClock, request.lastOnly)
                     .then(result => floSupernode.supernodeClientWS.send(`${requestor} ${JSON.stringify(result)}`))
                     .catch(error => console.log(error))
             else
-                compactIDB.searchData(floGlobals.defaultStorage, (k, v) => { return (v.application == request.application && (!request.receiverID || v.receiverID == request.receiverID)  && (!request.type || v.type == request.type)) }, request.vectorClock, request.lastOnly)
+                compactIDB.searchData(floGlobals.defaultStorage, (k, v) => { return (v.application == request.application && (!request.receiverID || v.receiverID == request.receiverID)  && (!request.type || v.type == request.type) && (!request.senderIDs || request.senderIDs.includes(v.senderID))) }, request.vectorClock, request.lastOnly)
                     .then(result => floSupernode.supernodeClientWS.send(`${requestor} ${JSON.stringify(result)}`))
                     .catch(error => console.log(error))
 

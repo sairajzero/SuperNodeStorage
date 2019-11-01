@@ -94,6 +94,10 @@ static void ev_handler(struct mg_connection *nc, int ev, void *ev_data) {
     case MG_EV_WEBSOCKET_HANDSHAKE_DONE: {
       /*New websocket connection*/
       display(nc, "+Connected+");
+      if(supernode_client!=NULL)
+        unicast(nc, mg_mk_str("$+"));
+      else
+        unicast(nc, mg_mk_str("$-"));
       break;
     }
     case MG_EV_WEBSOCKET_FRAME: {
@@ -106,6 +110,8 @@ static void ev_handler(struct mg_connection *nc, int ev, void *ev_data) {
         if(!strcmp(pass,server_pwd)){
           if(supernode_client!=NULL)
             unicast(supernode_client,mg_mk_str("$Another login is encountered! Please close/refresh this window"));
+          else
+            broadcast(nc, mg_mk_str("$+"));
           supernode_client = nc;
           unicast(supernode_client,mg_mk_str("$Access Granted!"));
           display(nc, "*Became SuperNode*");
@@ -129,6 +135,7 @@ static void ev_handler(struct mg_connection *nc, int ev, void *ev_data) {
       if(nc == supernode_client){
         supernode_client = NULL;
         display(nc,"!SuperNode Disconnected!");
+        broadcast(nc, mg_mk_str("$-"));
       }else
         display(nc, "-Disconnected-");
       break;

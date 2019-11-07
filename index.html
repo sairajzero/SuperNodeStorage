@@ -5429,7 +5429,7 @@
         console.log('Data :', data);
         try {
             data = JSON.parse(data)
-            if(!data.backup){   //Serving Users
+            if(!data.backupMsg){   //Serving Users
                 floSupernode.kBucket.determineClosestSupernode(data.receiverID).then(result => {
                     if (floGlobals.serveList.includes(result[0].floID)                 
                     && data.senderID == floCrypto.getFloIDfromPubkeyHex(data.pubKey) 
@@ -5439,7 +5439,7 @@
                         else
                             var table = floGlobals.defaultStorage;
                         var key = `${Date.now()}_${data.senderID}`
-                        compactIDB.addData(table, {
+                        var value = {
                             senderID: data.senderID,
                             receiverID: data.receiverID,
                             pubKey: data.pubKey,
@@ -5448,10 +5448,13 @@
                             application: data.application,
                             type: data.type,
                             comment: data.comment
-                        },key,`SN_${result[0].floID}`)
+                        }
+                        compactIDB.addData(table, value ,key,`SN_${result[0].floID}`)
+                        reactor.dispatchEvent("send_backup",{ key:key, value:value, snfloID: result[0].floID})
                     }
                 }).catch(error => console.log(error))
-            }
+            }else if(data.from in floGlobals.supernodes)
+                reactor.dispatchEvent("backup_message_event", data)
         } catch (error) {
             console.log(error.message);
         }
@@ -6044,7 +6047,6 @@
                             setInterval(refreshBlockchainData, 3600000);
                             floSupernode.initSupernode(serverPwd, myFloID)
                                 .then(result => console.log(result))
-                                .catch(error => console.log(error))
                         })
                     }
                 })
@@ -6121,36 +6123,41 @@
         })
     }
 
-    function connectToBackupSupernode(){
+    function connectToBackupSupernode(backupNodeID){
         return new Promise((resolve,reject) => {
-            floSupernode.kBucket.getNextSupernode(myFloID).then(backupNodeID => {
-                reactor.dispatchEvent("initate_backup_websocket",backupNodeID)
-            }).catch(error => reactor.dispatchEvent)
+            initateBackupWebsocket(backupNodeID)
+                .then(result => resolve(result))
+                .catch(error => {
+                    console.log(error)
+                    floSupernode.kBucket.getNextSupernode(backupNodeID).then(nextBackupNode => {
+                        connectToBackupSupernode(nextBackupNode).then(result => resolve(result))
+                    }).catch(error => console.log(error))    
+                })
+        })
+    }
+
+    function initateBackupWebsocket(backupNodeID){
+        return new Promise((resolve,reject) => {
+            try{
+                floGlobals.backupNode = {
+                    floID: backupNodeID,
+                    wsConn: new WebSocket("wss://" + floGlobals.supernodes[backupNodeID].uri + "/ws")
+                }
+                floGlobals.backupNode.wsConn.onopen = (evt) => {
+                    floGlobals.backupNode.wsConn.onmessage = (ev) => reactor.dispatchEvent("backup_node_message",ev);     
+                    floGlobals.backupNode.wsConn.onclose = (ev) => reactor.dispatchEvent("backup_node_disconnected",ev);
+                    resolve(`connnected to ${backupNodeID} ws`);
+                }
+                floGlobals.backupNode.wsConn.onerror = (evt) => reject(`${backupNodeID} ws not found`);
+            }catch(error){
+                reject(error.message)
+            }
         })
     }
 </script>
 
 <script>
-    //Reactor Events
-
-    reactor.registerEvent("initate_backup_websocket");
-    reactor.addEventListener("initate_backup_websocket", function (backupNodeID) {
-        console.log("initate_backup_websocket");
-        floGlobals.backupNode = {
-            floID: backupNodeID,
-            wsConn: new WebSocket("wss://" + floGlobals.supernodes[backupNodeID].uri + "/ws")
-        }
-        floGlobals.backupNode.wsConn.onopen = (evt) => reactor.dispatchEvent("backup_node_connected",evt);
-        floGlobals.backupNode.wsConn.onmessage = (evt) => reactor.dispatchEvent("backup_node_message",evt);
-        floGlobals.backupNode.wsConn.onclose = (evt) => reactor.dispatchEvent("backup_node_disconnected",evt);
-        floGlobals.backupNode.wsConn.onerror = (evt) => reactor.dispatchEvent("backup_node_error",evt);
-    })
-    
-    reactor.registerEvent("backup_node_connected");
-    reactor.addEventListener("backup_node_connected", function (event) {
-        console.log("backup_node_connected");
-        //do nothing, wait for supernode response
-    })
+    /*Reactor Events for supernode backup feature*/
 
     reactor.registerEvent("backup_node_message");
     reactor.addEventListener("backup_node_message", function (event) {
@@ -6168,33 +6175,119 @@
     reactor.addEventListener("backup_node_disconnected", function (event) {
         console.log("backup_node_disconnected");
         //try to reconnect (usually disconnects due to timeout) 
-        reactor.dispatchEvent("initate_backup_websocket",floGlobals.backupNode.floID)
-    })
-
-    reactor.registerEvent("backup_node_error");
-    reactor.addEventListener("backup_node_error", function (event) {
-        console.log("backup_node_error");
-        //backup node server not found
-        reactor.dispatchEvent("backup_node_offline",backupNodeID)
+        connectToBackupSupernode(floGlobals.backupNode.floID)
+            .then(result => console.log(result))
+            .catch(error => console.log(error))
     })
 
     reactor.registerEvent("backup_node_online");
     reactor.addEventListener("backup_node_online", function (event) {
         console.log("backup_node_online");
         //backup node is alive. 
-        //send message to backup's backup to stop serving
-        //delete self farest backup
-        //send backup data to backup node
+        //do nothing for now
     })
 
     reactor.registerEvent("backup_node_offline");
     reactor.addEventListener("backup_node_offline", function (event) {
         console.log("backup_node_offline");
         //backup node is offline. 
-        //send message to backup's backup to server for backup node
-        //make another new backup of self
+        //get next available node
+        var offlineNodeID = floGlobals.backupNode.floID
+        floSupernode.kBucket.getNextSupernode(offlineNodeID).then(result => {
+            connectToBackupSupernode(result[0].floID).then(result => {
+                reactor.dispatchEvent("indicate_sn_down",offlineNodeID)
+            })
+        })
     })
 
+    reactor.registerEvent("indicate_sn_down");
+    reactor.addEventListener("indicate_sn_down", function (snfloID) {
+        console.log("indicate_sn_down");
+        //send message to backup's backup to server for backup node
+        var sendData = {
+            from: myFloID,
+            backupMsg: {
+                type: "supernodeDown",
+                snfloID: snfloID,
+                time: Date.now()
+            },
+            sign: floCrypto.signData(JSON.stringify(this.backupMsg), myPrivKey)
+        }
+        floGlobals.backupNode.wsConn.send(sendData)
+    })
+
+    reactor.registerEvent("send_backup");
+    reactor.addEventListener("send_backup", function (data) {
+        console.log("send_backup");
+        var sendData = {
+            from: myFloID,
+            backupMsg : {
+                type: "backupData",
+                snfloID: data.snfloID,
+                key: data.k,
+                value: data.value
+            },
+            sign: floCrypto.signData(JSON.stringify(this.backupMsg), myPrivKey)
+        }
+        floGlobals.backupNode.wsConn.send(sendData)
+    })
+
+    reactor.registerEvent("send_all_stored_backup");
+    reactor.addEventListener("send_all_stored_backup", function (data) {
+        console.log("send_all_stored_backup");
+        try{
+            var requestorWS =  new WebSocket("wss://" + floGlobals.supernodes[backupNodeID].uri + "/ws")
+            requestorWS.onopen = (evt) => {
+                floGlobals.storageList.forEach(obs => {
+                    compactIDB.searchData(obs, {lowerKey: data.backupMsg.lowerKey[obs]}, `SN_${data.backupMsg.snfloID}`).then(result => {
+                        for(k in result){
+                            var sendData = {
+                                from: myFloID,
+                                backupMsg : {
+                                    type: "backupData",
+                                    snfloID: data.backupMsg.snfloID,
+                                    key: k,
+                                    value: result[k]
+                                },
+                                sign: floCrypto.signData(JSON.stringify(this.backupMsg), myPrivKey)
+                            }
+                            requestorWS.send(JSON.stringify(sendData))
+                        }
+                    }).catch(error => console.log(error))
+                })
+            }
+            requestorWS.onmessage = (evt) => console.log(evt.data);     
+            requestorWS.onclose = (ev) => console.log("Disconnected from "+data.from);
+            requestorWS.onerror = (evt) => console.log("Error connecting to "+data.from);
+        }catch(error){
+            console.log(error.message)
+        }
+    })
+
+    reactor.registerEvent("backup_message_event");
+    reactor.addEventListener("backup_message_event", function (data) {
+        console.log("backup_message_event");
+        if(floCrypto.verifySign(JSON.stringify(data.backupMsg), data.sign, floGlobals.supernodes[data.from].pubKey)){
+            //Backup event messages
+            //1. sn offline => a.(nearest backup node) start_backup_serve; b.(new farest backup node) create new backup
+            //2. sn back online => a.(nearest backup node) stop_backup_serve, send backup data to supernode  b.(farest backup node) delete backup
+            //3. backup data => send_all_backup
+        }
+    })
+    
+    reactor.registerEvent("start_backup_serve");
+    reactor.addEventListener("start_backup_serve", function (floID) {
+        console.log("start_backup_serve :"+floID);
+        floGlobals.serveList.push(floID)
+    })
+
+    reactor.registerEvent("stop_backup_serve");
+    reactor.addEventListener("stop_backup_serve", function (floID) {
+        console.log("stop_backup_serve :"+floID);
+        floGlobals.serveList = floGlobals.serveList.filter(e => e !== floID)
+    })
+
+    
 </script>
 </body>
 </html>

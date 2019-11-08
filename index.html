@@ -5434,10 +5434,6 @@
                     if (floGlobals.serveList.includes(result[0].floID)                 
                     && data.senderID == floCrypto.getFloIDfromPubkeyHex(data.pubKey) 
                     && floCrypto.verifySign(JSON.stringify(data.message), data.sign, data.pubKey)){
-                        if (floGlobals.storageList.includes(data.application))
-                            var table = data.application;
-                        else
-                            var table = floGlobals.defaultStorage;
                         var key = `${Date.now()}_${data.senderID}`
                         var value = {
                             senderID: data.senderID,
@@ -5449,7 +5445,7 @@
                             type: data.type,
                             comment: data.comment
                         }
-                        compactIDB.addData(table, value ,key,`SN_${result[0].floID}`)
+                        compactIDB.addData(floGlobals.storageList.includes(value.application) ? value.application:floGlobals.defaultStorage , value ,key,`SN_${result[0].floID}`)
                         reactor.dispatchEvent("send_backup",{ key:key, value:value, snfloID: result[0].floID})
                     }
                 }).catch(error => console.log(error))
@@ -5594,7 +5590,7 @@
     },
 
     searchData: function (obsName, options = {}, dbName = this.dbName) {
-        options.lowerKey = options.atKey || options.lowerKey || 1
+        options.lowerKey = options.atKey || options.lowerKey || 0
         options.upperKey = options.atKey || options.upperKey || false
         options.patternEval = options.patternEval || ((k,v) => {return true})
         options.lastOnly = options.lastOnly || false
@@ -6045,8 +6041,16 @@
                             console.log(result)
                             serverPwd = prompt("Enter Server Pass!")
                             setInterval(refreshBlockchainData, 3600000);
-                            floSupernode.initSupernode(serverPwd, myFloID)
-                                .then(result => console.log(result))
+                            floSupernode.initSupernode(serverPwd, myFloID).then(result => {
+                                console.log(result)
+                                floSupernode.kBucket.getNextSupernode(myFloID).then(result => {
+                                    connectToBackupSupernode(result[0].floID).then(result => {
+                                        console.log(result)
+                                        reactor.dispatchEvent("indicate_sn_up",myFloID)
+                                        reactor.dispatchEvent("request_data",{floid:myFloID, holder:floGlobals.backupNode.floID})
+                                    })
+                                })
+                            })
                         })
                     }
                 })
@@ -6216,6 +6220,22 @@
         floGlobals.backupNode.wsConn.send(sendData)
     })
 
+    reactor.registerEvent("indicate_sn_up");
+    reactor.addEventListener("indicate_sn_up", function (snfloID) {
+        console.log("indicate_sn_up");
+        //send message to backup's backup to server for backup node
+        var sendData = {
+            from: myFloID,
+            backupMsg: {
+                type: "supernodeUp",
+                snfloID: snfloID,
+                time: Date.now()
+            },
+            sign: floCrypto.signData(JSON.stringify(this.backupMsg), myPrivKey)
+        }
+        floGlobals.backupNode.wsConn.send(sendData)
+    })
+
     reactor.registerEvent("send_backup");
     reactor.addEventListener("send_backup", function (data) {
         console.log("send_backup");
@@ -6232,11 +6252,11 @@
         floGlobals.backupNode.wsConn.send(sendData)
     })
 
-    reactor.registerEvent("send_all_stored_backup");
-    reactor.addEventListener("send_all_stored_backup", function (data) {
-        console.log("send_all_stored_backup");
+    reactor.registerEvent("send_stored_backup");
+    reactor.addEventListener("send_stored_backup", function (data) {
+        console.log("send_stored_backup");
         try{
-            var requestorWS =  new WebSocket("wss://" + floGlobals.supernodes[backupNodeID].uri + "/ws")
+            var requestorWS =  new WebSocket("wss://" + floGlobals.supernodes[data.from].uri + "/ws")
             requestorWS.onopen = (evt) => {
                 floGlobals.storageList.forEach(obs => {
                     compactIDB.searchData(obs, {lowerKey: data.backupMsg.lowerKey[obs]}, `SN_${data.backupMsg.snfloID}`).then(result => {
@@ -6257,7 +6277,7 @@
                 })
             }
             requestorWS.onmessage = (evt) => console.log(evt.data);     
-            requestorWS.onclose = (ev) => console.log("Disconnected from "+data.from);
+            requestorWS.onclose = (evt) => console.log("Disconnected from "+data.from);
             requestorWS.onerror = (evt) => console.log("Error connecting to "+data.from);
         }catch(error){
             console.log(error.message)
@@ -6269,10 +6289,53 @@
         console.log("backup_message_event");
         if(floCrypto.verifySign(JSON.stringify(data.backupMsg), data.sign, floGlobals.supernodes[data.from].pubKey)){
             //Backup event messages
-            //1. sn offline => a.(nearest backup node) start_backup_serve; b.(new farest backup node) create new backup
-            //2. sn back online => a.(nearest backup node) stop_backup_serve, send backup data to supernode  b.(farest backup node) delete backup
-            //3. backup data => send_all_backup
+            if(data.backupMsg.type === "backupData" && floGlobals.backupStoredList.includes(data.backupMsg.snfloID))
+                reactor.dispatchEvent("store_backup_data", data.backupMsg)
+            else if(data.backupMsg.type === "supernodeDown")
+                reactor.dispatchEvent("start_backup_serve", data.backupMsg.snfloID)
+            else if(data.backupMsg.type === "supernodeUp")
+                reactor.dispatchEvent("stop_backup_serve", data.backupMsg.snfloID)
+            else if(data.backupMsg.type === "dataRequest" && floGlobals.backupStoredList.includes(data.backupMsg.snfloID))
+                reactor.dispatchEvent("send_stored_backup", data)
         }
+    })
+
+    reactor.registerEvent("request_data");
+    reactor.addEventListener("request_data", function (event) {
+        console.log("request_data");
+        try{
+            var holderWS =  new WebSocket("wss://" + floGlobals.supernodes[event.holder].uri + "/ws")
+            holderWS.onopen = (evt) => {
+                var promises = []
+                for(var i=0; i < floGlobals.storageList.length; i++)
+                    promises[i] = compactIDB.searchData(floGlobals.storageList[i],{lastOnly: true},`SN_${event.floID}`)
+                Promise.all(promises).then(results => {
+                    var lowerKey = {}
+                    for(var i=0; i < results.length; i++)
+                        for(key in results[i])
+                            lowerKey[floGlobals.storageList[i]] = key
+                    var sendData = {
+                        from: myFloID,
+                        backupMsg = {
+                            snfloID: event.floID,
+                            lowerKey: lowerKey
+                        },
+                        sign: floCrypto.signData(JSON.stringify(this.backupMsg), myPrivKey)
+                    }
+                })
+            }
+            holderWS.onmessage = (evt) => console.log(evt.data);     
+            holderWS.onclose = (evt) => console.log("Disconnected from " + event.holder);
+            holderWS.onerror = (evt) => console.log("Error connecting to " + event.holder);
+        }catch(error){
+            console.log(error.message)
+        }
+    })
+
+    reactor.registerEvent("store_backup_data");
+    reactor.addEventListener("store_backup_data", function (data) {
+        console.log("store_backup_data");
+        compactIDB.addData(floGlobals.storageList.includes(data.value.application) ? data.value.application:floGlobals.defaultStorage , data.value ,data.key,`SN_${data.snfloID}`)
     })
     
     reactor.registerEvent("start_backup_serve");

@@ -5238,7 +5238,7 @@
             if (!isFloIdUint8)
               flo_addr = this.floIdToKbucketId(flo_addr);
             const KA = KB.toArray();
-            let pos = KA.indexOf(flo_addr)
+            let pos = KB._indexOf(KB.root,flo_addr)
             var prevSupernode = []
             for(var i = 0; i < n; i++){
                 if(pos - i < 0)
@@ -5261,7 +5261,7 @@
             if (!isFloIdUint8)
               flo_addr = this.floIdToKbucketId(flo_addr);
             const KA = KB.toArray();
-            let pos = KA.indexOf(flo_addr)
+            let pos = KB._indexOf(KB.root,flo_addr)
             var nextSupernode = []
             for(var i = 0; i < n; i++){
                 if(pos + i >= KA.length)
@@ -6076,6 +6076,7 @@
     function initIndexedDBforSupernodeDataStorage(floID){
         return new Promise((resolve, reject) => {
             var indexesList = ["senderID","receiverID","pubKey","message","sign","application","type","comment"];
+            var storageList = floGlobals.storageList
             var idbObj = {}
             for(var i=0;i<storageList.length;i++){
                 idbObj[storageList[i]] = {
@@ -6131,13 +6132,16 @@
                 resolve("Connected to all backup nodes")
             else{
                 floSupernode.kBucket.getNextSupernode(curNode).then(nextBackupNode => {
-                    connectToBackupSupernode(nextBackupNode).then(backupConn => {
-                        floGlobals.backupNodes[i] = backupConn
-                        connectToAllBackupSupernode(backupConn.floID, i+1)
-                            .then(result => resolve(result))
-                            .catch(error => reject(error))
-                    })
-                }).catch(error => console.log(error))    
+                    if(nextBackupNode[0].floID != myFloID){
+                        connectToBackupSupernode(nextBackupNode[0].floID).then(backupConn => {
+                            floGlobals.backupNodes[i] = backupConn
+                            connectToAllBackupSupernode(backupConn.floID, i+1)
+                                .then(result => resolve(result))
+                                .catch(error => reject(error))
+                        })
+                    }else
+                        reject("No more supernodes available")
+                }).catch(error => reject(error))    
             }
             
         })
@@ -6150,7 +6154,7 @@
                 .catch(error => {
                     console.log(error)
                     floSupernode.kBucket.getNextSupernode(backupNodeID).then(nextBackupNode => {
-                        connectToBackupSupernode(nextBackupNode).then(result => resolve(result))
+                        connectToBackupSupernode(nextBackupNode[0].floID).then(result => resolve(result))
                     }).catch(error => console.log(error))    
                 })
         })

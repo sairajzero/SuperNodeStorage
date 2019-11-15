@@ -6414,13 +6414,19 @@
     reactor.addEventListener("indicate_supernode_up", function (snfloID) {
         console.log("indicate_supernode_up");
         //send message to backup's backup to server for backup node
-        var backupMsg = {
+        var backupMsg1 = {
             type: "supernodeUp",
             snfloID: snfloID,
             time: Date.now()
         }
-        reactor.dispatchEvent("send_message_to_backup_nodes", backupMsg)
-        reactor.dispatchEvent("request_data", {holder:floGlobals.backupNodes[0].floID, snfloID:myFloID})
+        reactor.dispatchEvent("send_message_to_backup_nodes", backupMsg1)
+        var backupMsg2 = {
+            type: "startBackupStore",
+            snfloID: snfloID,
+            time: Date.now()
+        }
+        reactor.dispatchEvent("send_message_to_backup_nodes", backupMsg2)
+        reactor.dispatchEvent("request_data", {holder:floGlobals.backupNodes[0].floID, snfloID:snfloID})
     })
 
     reactor.registerEvent("supernode_back_online");
@@ -6471,7 +6477,7 @@
             }
             if(index){
                 initateBackupWebsocket(snfloID).then(result => {
-                    floGlobals.backupNodes.splice(index,0,result) // add revived node as backup node
+                    floGlobals.backupNodes.splice(index, 0, result) // add revived node as backup node
                     floGlobals.backupNodes.pop()    // remove the last extra backup node 
                 }).catch(error => console.log(error))
             }
@@ -6482,20 +6488,21 @@
     reactor.addEventListener("start_backup_serve", function (snfloID) {
         console.log("start_backup_serve :"+snfloID);
         //start serving the dead node
-        if(!floGlobals.serveList.includes(snfloID))
+        if(!floGlobals.serveList.includes(snfloID)){
             floGlobals.serveList.push(snfloID)
-        //indicate the last backup node to store the dead's backup too
-        var sendData = {
-            from: myFloID,
-            backupMsg: {
-                type: "startBackupStore",
-                snfloID: snfloID,
-                time: Date.now()
-            },
-            sign: floCrypto.signData(JSON.stringify(this.backupMsg), myPrivKey)
+            //indicate the last backup node to store the dead's backup too
+            var sendData = {
+                from: myFloID,
+                backupMsg: {
+                    type: "startBackupStore",
+                    snfloID: snfloID,
+                    time: Date.now()
+                },
+                sign: floCrypto.signData(JSON.stringify(this.backupMsg), myPrivKey)
+            }
+            var lastIndex = floGlobals.backupNodes.length - 1
+            floGlobals.backupNodes[lastIndex].wsConn.send(JSON.stringify(sendData))
         }
-        var lastIndex = floGlobals.backupNodes.length - 1
-        floGlobals.backupNodes[lastIndex].wsConn.send(JSON.stringify(sendData))
     })
 
     reactor.registerEvent("stop_backup_serve");
@@ -6521,11 +6528,12 @@
     reactor.registerEvent("start_backup_store");
     reactor.addEventListener("start_backup_store", function (event) {
         console.log("start_backup_store :"+event.snfloID);
-        if(!floGlobals.backupStoredList.includes(event.snfloID))
+        if(!floGlobals.backupStoredList.includes(event.snfloID)){
             floGlobals.backupStoredList.push(event.snfloID)
-        initIndexedDBforSupernodeDataStorage(event.snfloID).then(result => {
-            reactor.dispatchEvent("request_data",{holder:event.from, snfloID:event.snfloID})
-        }).catch(error => console.log(error))
+            initIndexedDBforSupernodeDataStorage(event.snfloID).then(result => {
+                reactor.dispatchEvent("request_data",{holder:event.from, snfloID:event.snfloID})
+            }).catch(error => console.log(error))
+        }
     })
 
     reactor.registerEvent("stop_backup_store");

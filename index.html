@@ -6026,7 +6026,12 @@
 </script>
 
 <script id="SuperNodeStorageScript">
-    function onLoadStartUp() {
+
+    function sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    async function onLoadStartUp() {
         myPrivKey = prompt("Enter Private Key : ")
         myPubKey = floCrypto.getPubKeyHex(myPrivKey)
         myFloID = floCrypto.getFloIDfromPubkeyHex(myPubKey)
@@ -6044,6 +6049,7 @@
                             setInterval(refreshBlockchainData, 3600000);
                             floSupernode.initSupernode(serverPwd, myFloID).then(result => {
                                 console.log(result)
+                                await sleep(5000)
                                 connectToAllBackupSupernode().then(result => {
                                     console.log(result)
                                     reactor.dispatchEvent("indicate_supernode_up",myFloID)

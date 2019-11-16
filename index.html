@@ -4892,7 +4892,6 @@
 
     //Sign data using private-key
     signData: function (data, privateKeyHex) {
-        console.log(data)
       var key = new Bitcoin.ECKey(privateKeyHex);
       key.setCompressed(true);
 
@@ -6263,14 +6262,13 @@
     reactor.addEventListener("send_message_to_backup_nodes", function (backupMsg) {
         console.log("send_message_to_backup_nodes");
         //send message to all connected backup nodes
-        console.log(backupMsg)
         var sendData = {
             from: myFloID,
             backupMsg: backupMsg,
             sign: floCrypto.signData(JSON.stringify(backupMsg), myPrivKey)
         }
         for(var i = 0; i < floGlobals.backupNodes.length; i++)
-            floGlobals.backupNodes[i].wsConn.send(sendData)
+            floGlobals.backupNodes[i].wsConn.send(JSON.stringify(sendData))
     })
 
     reactor.registerEvent("send_message_to_node");
@@ -6286,7 +6284,7 @@
                         backupMsg: event.backupMsg,
                         sign: floCrypto.signData(JSON.stringify(event.backupMsg), myPrivKey)
                     }
-                    nodeWS.send(JSON.stringify(this.sendData))
+                    nodeWS.send(JSON.stringify(sendData))
                 }
                 if(event.bulkBackupMsg){
                     for(var i=0; i < event.bulkBackupMsg.length; i++){
@@ -6295,7 +6293,7 @@
                             backupMsg: event.bulkBackupMsg[i],
                             sign: floCrypto.signData(JSON.stringify(event.bulkBackupMsg[i]), myPrivKey)
                         }
-                        nodeWS.send(JSON.stringify(this.sendData))
+                        nodeWS.send(JSON.stringify(sendData))
                     }
                 }
                 

@@ -6328,7 +6328,7 @@
                 var requestorWS =  new WebSocket("wss://" + floGlobals.supernodes[event.from].uri + "/ws")
                 requestorWS.onopen = (evt) => {
                     floGlobals.storageList.forEach(obs => {
-                        compactIDB.searchData(obs, {lowerKey: event.lowerKey[obs]}, `SN_${data.backupMsg.snfloID}`).then(result => {
+                        compactIDB.searchData(obs, {lowerKey: event.lowerKey[obs]}, `SN_${event.snfloID}`).then(result => {
                             for(k in result){
                                 var sendData = {
                                     from: myFloID,

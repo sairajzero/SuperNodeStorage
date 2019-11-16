@@ -4892,6 +4892,7 @@
 
     //Sign data using private-key
     signData: function (data, privateKeyHex) {
+        console.log(data)
       var key = new Bitcoin.ECKey(privateKeyHex);
       key.setCompressed(true);
 
@@ -5240,7 +5241,7 @@
             const KA = KB.toArray();
             let pos = KB._indexOf(KB.root,flo_addr)
             var prevSupernode = []
-            for(var i = 0; i < n; i++){
+            for(var i = 1; i <= n; i++){
                 if(pos - i < 0)
                     var prev = pos - i + KA.length
                 else
@@ -5263,7 +5264,7 @@
             const KA = KB.toArray();
             let pos = KB._indexOf(KB.root,flo_addr)
             var nextSupernode = []
-            for(var i = 0; i < n; i++){
+            for(var i = 1; i <= n; i++){
                 if(pos + i >= KA.length)
                     var next = pos + i - KA.length
                 else
@@ -6047,13 +6048,12 @@
                             console.log(result)
                             serverPwd = prompt("Enter Server Pass!")
                             setInterval(refreshBlockchainData, 3600000);
-                            floSupernode.initSupernode(serverPwd, myFloID).then(result => {
+                            floSupernode.initSupernode(serverPwd, myFloID).then(async result => {
                                 console.log(result)
-                                sleep(5000).then( _ => {
-                                    connectToAllBackupSupernode().then(result => {
-                                        console.log(result)
-                                        reactor.dispatchEvent("indicate_supernode_up",myFloID)
-                                    })
+                                await sleep(5000)
+                                connectToAllBackupSupernode().then(result => {
+                                    console.log(result)
+                                    reactor.dispatchEvent("indicate_supernode_up",myFloID)
                                 })
                             })
                         })
@@ -6124,7 +6124,7 @@
                     compactIDB.readAllData("supernodes").then(result => {
                         floGlobals.supernodes = result
                         compactIDB.readAllData("config").then(result => {
-                            floGlobals.config = result
+                            floGlobals.supernodeConfig = result
                             resolve("Read supernode from blockchain");                    
                         })                   
                     })
@@ -6139,6 +6139,7 @@
                 resolve("Connected to all backup nodes")
             else{
                 floSupernode.kBucket.getNextSupernode(curNode).then(nextBackupNode => {
+                    console.log(nextBackupNode)
                     if(nextBackupNode[0].floID != myFloID){
                         connectToBackupSupernode(nextBackupNode[0].floID).then(backupConn => {
                             floGlobals.backupNodes[i] = backupConn
@@ -6170,6 +6171,7 @@
     function initateBackupWebsocket(backupNodeID){
         return new Promise((resolve,reject) => {
             try{
+                console.log(backupNodeID)
                 var backupNode = {
                     floID: backupNodeID,
                     wsConn: new WebSocket("wss://" + floGlobals.supernodes[backupNodeID].uri + "/ws")
@@ -6237,9 +6239,9 @@
                     type: "startBackupStore",
                     snfloID: myFloID,
                     time: Date.now()
-                },
-                sign: floCrypto.signData(JSON.stringify(this.backupMsg), myPrivKey)
+                }
             }
+            sendData1.sign = floCrypto.signData(JSON.stringify(sendData1.backupMsg), myPrivKey)
             floGlobals.backupNodes[len].wsConn.send(JSON.stringify(sendData1))
             //inform the immediate next node of the dead to start serving it
             if(index == 0){
@@ -6249,9 +6251,9 @@
                         type: "startBackupServe",
                         snfloID: offlineNodeID,
                         time: Date.now()
-                    },
-                    sign: floCrypto.signData(JSON.stringify(this.backupMsg), myPrivKey)
+                    }
                 }
+                sendData2.sign = floCrypto.signData(JSON.stringify(sendData2.backupMsg), myPrivKey)
                 floGlobals.backupNodes[0].wsConn.send(JSON.stringify(sendData2))
             }
         })
@@ -6261,13 +6263,14 @@
     reactor.addEventListener("send_message_to_backup_nodes", function (backupMsg) {
         console.log("send_message_to_backup_nodes");
         //send message to all connected backup nodes
+        console.log(backupMsg)
         var sendData = {
             from: myFloID,
             backupMsg: backupMsg,
-            sign: floCrypto.signData(JSON.stringify(this.backupMsg), myPrivKey)
+            sign: floCrypto.signData(JSON.stringify(backupMsg), myPrivKey)
         }
         for(var i = 0; i < floGlobals.backupNodes.length; i++)
-            floGlobals.backupNode[i].wsConn.send(sendData)
+            floGlobals.backupNodes[i].wsConn.send(sendData)
     })
 
     reactor.registerEvent("send_message_to_node");
@@ -6281,7 +6284,7 @@
                     var sendData = {
                         from: myFloID,
                         backupMsg: event.backupMsg,
-                        sign: floCrypto.signData(JSON.stringify(this.backupMsg), myPrivKey)
+                        sign: floCrypto.signData(JSON.stringify(event.backupMsg), myPrivKey)
                     }
                     nodeWS.send(JSON.stringify(this.sendData))
                 }
@@ -6290,7 +6293,7 @@
                         var sendData = {
                             from: myFloID,
                             backupMsg: event.bulkBackupMsg[i],
-                            sign: floCrypto.signData(JSON.stringify(this.backupMsg), myPrivKey)
+                            sign: floCrypto.signData(JSON.stringify(event.bulkBackupMsg[i]), myPrivKey)
                         }
                         nodeWS.send(JSON.stringify(this.sendData))
                     }
@@ -6336,9 +6339,9 @@
                                         snfloID: event.snfloID,
                                         key: k,
                                         value: result[k]
-                                    },
-                                    sign: floCrypto.signData(JSON.stringify(this.backupMsg), myPrivKey)
+                                    }
                                 }
+                                sendData.sign = floCrypto.signData(JSON.stringify(sendData.backupMsg), myPrivKey)
                                 requestorWS.send(JSON.stringify(sendData))
                             }
                         }).catch(error => console.log(error))
@@ -6508,9 +6511,9 @@
                     type: "startBackupStore",
                     snfloID: snfloID,
                     time: Date.now()
-                },
-                sign: floCrypto.signData(JSON.stringify(this.backupMsg), myPrivKey)
+                }
             }
+            sendData.sign = floCrypto.signData(JSON.stringify(sendData.backupMsg), myPrivKey)
             var lastIndex = floGlobals.backupNodes.length - 1
             floGlobals.backupNodes[lastIndex].wsConn.send(JSON.stringify(sendData))
         }
@@ -6529,9 +6532,9 @@
                 type: "stopBackupStore",
                 snfloID: snfloID,
                 time: Date.now()
-            },
-            sign: floCrypto.signData(JSON.stringify(this.backupMsg), myPrivKey)
+            }
         }
+        sendData.sign = floCrypto.signData(JSON.stringify(sendData.backupMsg), myPrivKey)
         var lastIndex = floGlobals.backupNodes.length - 1
         floGlobals.backupNodes[lastIndex].wsConn.send(JSON.stringify(sendData))
     })

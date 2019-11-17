@@ -6050,8 +6050,9 @@
                             floSupernode.initSupernode(serverPwd, myFloID).then(async result => {
                                 console.log(result)
                                 await sleep(5000)
-                                connectToAllBackupSupernode().then(result => {
+                                connectToAllBackupSupernode().then(async result => {
                                     console.log(result)
+                                    await sleep(2000)
                                     reactor.dispatchEvent("indicate_supernode_up",myFloID)
                                 })
                             })
@@ -6196,9 +6197,9 @@
         console.log("backup_node_message");
         //received message from backup node
         if(event.data == "$+")
-            reactor.dispatchEvent("backup_node_online",event.floID);
+            reactor.dispatchEvent("backup_node_online", event.floID);
         else if (event.data == "$-")
-            reactor.dispatchEvent("backup_node_offline",event.floID);
+            reactor.dispatchEvent("backup_node_offline", event.floID);
         else
             console.log(event.data)
     })

@@ -5405,7 +5405,7 @@
             request = request.split(" ");
             requestor = request[0];
             request = JSON.parse(request[1]);
-            floSupernode.kBucket.determineClosestSupernode(data.receiverID).then(result => {
+            floSupernode.kBucket.determineClosestSupernode(request.receiverID).then(result => {
                 if((myFloID === result[0].floID || floGlobals.serveList.includes(result[0].floID))){
                     var filterOptions = {
                         lowerKey: request.lowerVectorClock,

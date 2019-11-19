@@ -6139,16 +6139,12 @@
                 resolve("Connected to all backup nodes")
             else{
                 floSupernode.kBucket.getNextSupernode(curNode).then(nextBackupNode => {
-                    console.log(nextBackupNode)
-                    if(nextBackupNode[0].floID != myFloID){
-                        connectToBackupSupernode(nextBackupNode[0].floID).then(backupConn => {
-                            floGlobals.backupNodes[i] = backupConn
-                            connectToAllBackupSupernode(backupConn.floID, i+1)
-                                .then(result => resolve(result))
-                                .catch(error => reject(error))
-                        })
-                    }else
-                        reject("No more supernodes available")
+                    connectToBackupSupernode(nextBackupNode[0].floID).then(backupConn => {
+                        floGlobals.backupNodes[i] = backupConn
+                        connectToAllBackupSupernode(backupConn.floID, i+1)
+                            .then(result => resolve(result))
+                            .catch(error => reject(error))
+                    })
                 }).catch(error => reject(error))    
             }
             

@@ -5412,7 +5412,7 @@
                         upperKey: request.upperVectorClock,
                         lastOnly: request.mostRecent,
                         atKey: request.atVectorClock,
-                        patternEval: (k, v) => { return (v.application == request.application && (!request.receiverID || v.receiverID == request.receiverID) && (!request.comment || v.comment == request.comment) && (!request.type || v.type == request.type) && (!request.senderIDs || request.senderIDs.includes(v.senderID))) }
+                        patternEval: (k, v) => { return (v.application == request.application && v.receiverID == request.receiverID && (!request.comment || v.comment == request.comment) && (!request.type || v.type == request.type) && (!request.senderIDs || request.senderIDs.includes(v.senderID))) }
                     }
                     compactIDB.searchData( floGlobals.storageList.includes(request.application) ? request.application : floGlobals.defaultStorage, filterOptions, `SN_${result[0].floID}`)
                         .then(result => floSupernode.supernodeClientWS.send(`${requestor} ${JSON.stringify(result)}`))
@@ -6139,12 +6139,16 @@
                 resolve("Connected to all backup nodes")
             else{
                 floSupernode.kBucket.getNextSupernode(curNode).then(nextBackupNode => {
-                    connectToBackupSupernode(nextBackupNode[0].floID).then(backupConn => {
-                        floGlobals.backupNodes[i] = backupConn
-                        connectToAllBackupSupernode(backupConn.floID, i+1)
-                            .then(result => resolve(result))
-                            .catch(error => reject(error))
-                    })
+                    if(myFloID === nextBackupNode[0].floID)
+                        reject("Not enough supernodes available")
+                    else{
+                        connectToBackupSupernode(nextBackupNode[0].floID).then(backupConn => {
+                            floGlobals.backupNodes[i] = backupConn
+                            connectToAllBackupSupernode(backupConn.floID, i+1)
+                                .then(result => resolve(result))
+                                .catch(error => reject(error))
+                        })
+                    }
                 }).catch(error => reject(error))    
             }
             
@@ -6225,8 +6229,9 @@
         //remove offline node and add the immediate next available node
         var index = floGlobals.backupNodes.indexOf(offlineNodeID);
         if (index !== -1) floGlobals.backupNodes.splice(index, 1);
+        //connect to next node available
         var len = floGlobals.backupNodes.length
-        connectToAllBackupSupernode(floGlobals.backupNodes[len-1], len).then(result => {
+        connectToAllBackupSupernode(len == 0? offlineNodeID : floGlobals.backupNodes[len-1], len).then(result => {
             console.log(result)
             //inform the newly connected node to store backups of self
             var sendData1 = {
@@ -6251,6 +6256,26 @@
                 }
                 sendData2.sign = floCrypto.signData(JSON.stringify(sendData2.backupMsg), myPrivKey)
                 floGlobals.backupNodes[0].wsConn.send(JSON.stringify(sendData2))
+            }
+        }).catch(error => {
+            console.log(error)
+            if(index == 0){
+                //start serving the dead node
+                if(floGlobals.backupNodes.length === 0)
+                    reactor.dispatchEvent("start_backup_serve", offlineNodeID)
+                //inform the immediate next node of the dead to start serving it
+                else{
+                    var sendData = {
+                        from: myFloID,
+                        backupMsg: {
+                            type: "startBackupServe",
+                            snfloID: offlineNodeID,
+                            time: Date.now()
+                        }
+                    }
+                    sendData.sign = floCrypto.signData(JSON.stringify(sendData.backupMsg), myPrivKey)
+                    floGlobals.backupNodes[0].wsConn.send(JSON.stringify(sendData))
+                }
             }
         })
     })

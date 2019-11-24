@@ -31,10 +31,10 @@
 
     //Required for Supernode operations
     supernodes: {}, //each supnernode must be stored as floID : {uri:<uri>,pubKey:<publicKey>}
-    storageList : ["General"],
-    defaultStorage : "General",
+    diskList : ["General"],
+    defaultDisk : "General",
     serveList : [],
-    backupStoredList : [],
+    storedList : [],
     supernodeConfig : {},
     backupNodes : []
   }
@@ -5406,7 +5406,7 @@
             requestor = request[0];
             request = JSON.parse(request[1]);
             floSupernode.kBucket.determineClosestSupernode(request.receiverID).then(result => {
-                if((myFloID === result[0].floID || floGlobals.serveList.includes(result[0].floID))){
+                if(floGlobals.serveList.includes(result[0].floID)){
                     var filterOptions = {
                         lowerKey: request.lowerVectorClock,
                         upperKey: request.upperVectorClock,
@@ -5414,7 +5414,7 @@
                         atKey: request.atVectorClock,
                         patternEval: (k, v) => { return (v.application == request.application && v.receiverID == request.receiverID && (!request.comment || v.comment == request.comment) && (!request.type || v.type == request.type) && (!request.senderIDs || request.senderIDs.includes(v.senderID))) }
                     }
-                    compactIDB.searchData( floGlobals.storageList.includes(request.application) ? request.application : floGlobals.defaultStorage, filterOptions, `SN_${result[0].floID}`)
+                    compactIDB.searchData( floGlobals.diskList.includes(request.application) ? request.application : floGlobals.defaultDisk, filterOptions, `SN_${result[0].floID}`)
                         .then(result => floSupernode.supernodeClientWS.send(`${requestor} ${JSON.stringify(result)}`))
                         .catch(error => console.log(error))
                 }
@@ -5432,7 +5432,7 @@
             data = JSON.parse(data)
             if(!data.backupMsg){   //Serving Users
                 floSupernode.kBucket.determineClosestSupernode(data.receiverID).then(result => {
-                    if ((myFloID === result[0].floID || floGlobals.serveList.includes(result[0].floID))             
+                    if (floGlobals.serveList.includes(result[0].floID)         
                     && data.senderID == floCrypto.getFloIDfromPubkeyHex(data.pubKey) 
                     && floCrypto.verifySign(JSON.stringify(data.message), data.sign, data.pubKey)){
                         var key = `${Date.now()}_${data.senderID}`
@@ -5446,7 +5446,7 @@
                             type: data.type,
                             comment: data.comment
                         }
-                        compactIDB.addData(floGlobals.storageList.includes(value.application) ? value.application:floGlobals.defaultStorage , value ,key,`SN_${result[0].floID}`)
+                        compactIDB.addData(floGlobals.diskList.includes(value.application) ? value.application:floGlobals.defaultDisk , value ,key,`SN_${result[0].floID}`)
                         reactor.dispatchEvent("send_backup",{ key:key, value:value, snfloID: result[0].floID})
                     }
                 }).catch(error => console.log(error))
@@ -6049,6 +6049,8 @@
                             setInterval(refreshBlockchainData, 3600000);
                             floSupernode.initSupernode(serverPwd, myFloID).then(async result => {
                                 console.log(result)
+                                floGlobals.serveList.push(myFloID)
+                                floGlobals.storedList.push(myFloID)
                                 await sleep(5000)
                                 connectToAllBackupSupernode().then(async result => {
                                     console.log(result)
@@ -6065,7 +6067,7 @@
 
     function initIndexedDBforSupernodeConfig(){
         return new Promise((resolve, reject) => {
-            var storageList = floGlobals.storageList;
+            var diskList = floGlobals.diskList;
             var snObj = {
                 lastTx:{},
                 config:{},
@@ -6083,14 +6085,14 @@
     function initIndexedDBforSupernodeDataStorage(floID){
         return new Promise((resolve, reject) => {
             var indexesList = ["senderID","receiverID","pubKey","message","sign","application","type","comment"];
-            var storageList = floGlobals.storageList
+            var diskList = floGlobals.diskList
             var idbObj = {}
-            for(var i=0;i<storageList.length;i++){
-                idbObj[storageList[i]] = {
+            for(var i=0;i<diskList.length;i++){
+                idbObj[diskList[i]] = {
                     indexes:{}
                 }
                 for(var j=0;j<indexesList.length;j++)
-                    idbObj[storageList[i]].indexes[indexesList[j]] = null;
+                    idbObj[diskList[i]].indexes[indexesList[j]] = null;
             }
             compactIDB.initDB(`SN_${floID}`, idbObj)
                 .then(result => resolve("Initiated supernode storage IDB for "+floID))
@@ -6233,17 +6235,19 @@
         var len = floGlobals.backupNodes.length
         connectToAllBackupSupernode(len == 0? offlineNodeID : floGlobals.backupNodes[len-1], len).then(result => {
             console.log(result)
-            //inform the newly connected node to store backups of self
-            var sendData1 = {
-                from: myFloID,
-                backupMsg: {
-                    type: "startBackupStore",
-                    snfloID: myFloID,
-                    time: Date.now()
+            //inform the newly connected node to store backups of all serving
+            for(var i = 0; i < floGlobals.serveList.length; i++){
+                var sendData1 = {
+                    from: myFloID,
+                    backupMsg: {
+                        type: "startBackupStore",
+                        snfloID: myFloID,
+                        time: Date.now()
+                    }
                 }
+                sendData1.sign = floCrypto.signData(JSON.stringify(sendData1.backupMsg), myPrivKey)
+                floGlobals.backupNodes[len].wsConn.send(JSON.stringify(sendData1))
             }
-            sendData1.sign = floCrypto.signData(JSON.stringify(sendData1.backupMsg), myPrivKey)
-            floGlobals.backupNodes[len].wsConn.send(JSON.stringify(sendData1))
             //inform the immediate next node of the dead to start serving it
             if(index == 0){
                 var sendData2 = {
@@ -6262,10 +6266,10 @@
             if(index == 0){
                 //start serving the dead node
                 if(floGlobals.backupNodes.length === 0)
-                    reactor.dispatchEvent("start_backup_serve", offlineNodeID)
+                    floGlobals.serveList.push(offlineNodeID)
                 //inform the immediate next node of the dead to start serving it
                 else{
-                    var sendData = {
+                    var sendData2 = {
                         from: myFloID,
                         backupMsg: {
                             type: "startBackupServe",
@@ -6273,8 +6277,8 @@
                             time: Date.now()
                         }
                     }
-                    sendData.sign = floCrypto.signData(JSON.stringify(sendData.backupMsg), myPrivKey)
-                    floGlobals.backupNodes[0].wsConn.send(JSON.stringify(sendData))
+                    sendData2.sign = floCrypto.signData(JSON.stringify(sendData2.backupMsg), myPrivKey)
+                    floGlobals.backupNodes[0].wsConn.send(JSON.stringify(sendData2))
                 }
             }
         })
@@ -6345,11 +6349,11 @@
     reactor.addEventListener("send_stored_backup", function (event) {
         console.log("send_stored_backup");
         //send stored backuped data to the requestor node
-        if(event.snfloID === myFloID || floGlobals.backupStoredList.includes(event.snfloID)){
+        if(floGlobals.storedList.includes(event.snfloID)){
             try{
                 var requestorWS =  new WebSocket("wss://" + floGlobals.supernodes[event.from].uri + "/ws")
                 requestorWS.onopen = (evt) => {
-                    floGlobals.storageList.forEach(obs => {
+                    floGlobals.diskList.forEach(obs => {
                         compactIDB.searchData(obs, {lowerKey: event.lowerKey[obs]}, `SN_${event.snfloID}`).then(result => {
                             for(k in result){
                                 var sendData = {
@@ -6415,13 +6419,13 @@
         console.log("request_data");
         //request the backup data
         var promises = []
-        for(var i=0; i < floGlobals.storageList.length; i++)
-            promises[i] = compactIDB.searchData(floGlobals.storageList[i], {lastOnly: true},`SN_${event.snfloID}`)
+        for(var i=0; i < floGlobals.diskList.length; i++)
+            promises[i] = compactIDB.searchData(floGlobals.diskList[i], {lastOnly: true},`SN_${event.snfloID}`)
         Promise.all(promises).then(results => {
             var lowerKey = {}
             for(var i=0; i < results.length; i++)
                 for(key in results[i])
-                    lowerKey[floGlobals.storageList[i]] = key
+                    lowerKey[floGlobals.diskList[i]] = key
             var backupMsg = {
                 type: "dataRequest",
                 snfloID: event.snfloID,
@@ -6436,9 +6440,9 @@
     reactor.addEventListener("store_backup_data", function (data) {
         console.log("store_backup_data");
         //store received backup data
-        if(data.backupMsg.snfloID === myFloID || floGlobals.backupStoredList.includes(data.backupMsg.snfloID)){
+        if(floGlobals.storedList.includes(data.backupMsg.snfloID)){
             compactIDB.addData(
-                floGlobals.storageList.includes(data.value.application) ? data.value.application:floGlobals.defaultStorage, 
+                floGlobals.diskList.includes(data.value.application) ? data.value.application:floGlobals.defaultDisk, 
                 data.value, data.key, `SN_${data.snfloID}`
             )
         }
@@ -6467,22 +6471,24 @@
     reactor.addEventListener("supernode_back_online", function (snfloID) {
         console.log("supernode_back_online");
         if(floGlobals.serveList.includes(snfloID)){
-            //inform the revived node to serve the other dead nodes
+            //stop serving the revived node
+            reactor.dispatchEvent("stop_backup_serve", snfloID)
+            //inform the revived node to serve the other applicable dead nodes
             var kBucketArray = floSupernode.kBucket.supernodeKBucket.toArray
             for(var i=0; i < floGlobals.serveList.length; i++)
-                if(kBucketArray.indexOf(floGlobals.serveList[i]) <= kBucketArray.indexOf(snfloID)){
+                if(kBucketArray.indexOf(floGlobals.serveList[i]) < kBucketArray.indexOf(snfloID)){
                     var backupMsg = {
                         type: "startBackupServe",
                         snfloID: floGlobals.serveList[i],
                         time: Date.now()
                     }
-                    reactor.dispatchEvent("stop_backup_serve", floGlobals.serveList[i])
                     reactor.dispatchEvent("send_message_to_node", {snfloID:snfloID, backupMsg:backupMsg}) 
+                    reactor.dispatchEvent("stop_backup_serve", floGlobals.serveList[i])
                     i--;    //reduce iterator as an element is removed
                 }
         }
-        if(floGlobals.backupStoredList.includes(snfloID)){
-            var lastBackup = floGlobals.backupStoredList.pop()
+        if(floGlobals.storedList.includes(snfloID)){
+            var lastBackup = floGlobals.storedList.pop()
             //inform the revived node to store the backup
             var backupMsg1 = {
                 type: "startBackupStore",
@@ -6544,26 +6550,30 @@
         console.log("stop_backup_serve :"+snfloID);
         //stop serving the revived node
         var index = floGlobals.serveList.indexOf(snfloID);
-        if (index !== -1) floGlobals.serveList.splice(index, 1);
-        //indicate the last backup node to stop storing the revived's backup
-        var sendData = {
-            from: myFloID,
-            backupMsg: {
-                type: "stopBackupStore",
-                snfloID: snfloID,
-                time: Date.now()
+        if (index !== -1 && snfloID !== myFloID) {
+            floGlobals.serveList.splice(index, 1);
+            //indicate the last backup node to stop storing the revived's backup
+            var lastIndex = floGlobals.backupNodes.length - 1
+            if(lastIndex !== -1){
+                var sendData = {
+                    from: myFloID,
+                    backupMsg: {
+                        type: "stopBackupStore",
+                        snfloID: snfloID,
+                        time: Date.now()
+                    }
+                }
+                sendData.sign = floCrypto.signData(JSON.stringify(sendData.backupMsg), myPrivKey)
+                floGlobals.backupNodes[lastIndex].wsConn.send(JSON.stringify(sendData))
             }
         }
-        sendData.sign = floCrypto.signData(JSON.stringify(sendData.backupMsg), myPrivKey)
-        var lastIndex = floGlobals.backupNodes.length - 1
-        floGlobals.backupNodes[lastIndex].wsConn.send(JSON.stringify(sendData))
     })
 
     reactor.registerEvent("start_backup_store");
     reactor.addEventListener("start_backup_store", function (event) {
         console.log("start_backup_store :"+event.snfloID);
-        if(!floGlobals.backupStoredList.includes(event.snfloID)){
-            floGlobals.backupStoredList.push(event.snfloID)
+        if(!floGlobals.storedList.includes(event.snfloID)){
+            floGlobals.storedList.push(event.snfloID)
             initIndexedDBforSupernodeDataStorage(event.snfloID).then(result => {
                 reactor.dispatchEvent("request_data",{holder:event.from, snfloID:event.snfloID})
             }).catch(error => console.log(error))
@@ -6571,10 +6581,13 @@
     })
 
     reactor.registerEvent("stop_backup_store");
-    reactor.addEventListener("stop_backup_store", function (floID) {
-        console.log("stop_backup_store :"+floID);
-        var index = floGlobals.backupStoredList.indexOf(floID);
-        if (index !== -1) floGlobals.backupStoredList.splice(index, 1);
+    reactor.addEventListener("stop_backup_store", function (snfloID) {
+        console.log("stop_backup_store :"+snfloID);
+        var index = floGlobals.storedList.indexOf(snfloID);
+        if (index !== -1 && snfloID !== myFloID) {
+            floGlobals.storedList.splice(index, 1);
+            compactIDB.deleteDB(`SN_${snfloID}`)
+        }
     })
     
 </script>

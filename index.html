@@ -6113,9 +6113,11 @@
         return new Promise((resolve,reject) => {
             readSupernodeDataFromAPI().then(result => {
                 console.log(result)
-                floSupernode.kBucket.launch().then(result => {
-                    console.log(result)
-                    resolve("Refreshed Data from blockchain")
+                readAppSubAdminListFromAPI().then(result => {
+                    floSupernode.kBucket.launch().then(result => {
+                        console.log(result)
+                        resolve("Refreshed Data from blockchain")
+                    }).catch(error => reject(error))
                 }).catch(error => reject(error))
             }).catch(error => reject(error))
         })
@@ -6143,10 +6145,44 @@
                             floGlobals.supernodeConfig = config
                             compactIDB.readAllData("applications").then(applications => {
                                 floGlobals.applicationList = applications
-                                resolve("Read supernode from blockchain");       
+                                resolve("Read Supernode Data from Blockchain");       
                             }).catch(error => reject(error))             
                         }).catch(error => reject(error))                   
                     }).catch(error => reject(error))
+                }).catch(error => reject(error))
+            }).catch(error => reject(error))
+        })
+    }
+
+    function readAppSubAdminListFromAPI(){
+        return new Promise((resolve,reject) => {
+            var promises = []
+            for(app in floGlobals.applicationList){
+                var promise = new Promise((resolve,reject) => {
+                    compactIDB.readData("appSubAdmins", app).then(subAdmins => {
+                        compactIDB.readData("lastTx",floGlobals.applicationList[app]).then(lastTx => {
+                            floBlockchainAPI.readData(floGlobals.applicationList[app],{ignoreOld:lastTx,sentOnly:true,pattern:app}).then(result => {
+                                for(var i = result.data.length-1; i>=0; i--){
+                                    var content = JSON.parse(result.data[i])[app];
+                                    if(Array.isArray(content.removeSubAdmin))
+                                        subAdmins = subAdmins.filter(x => !content.removeSubAdmin.includes(x));
+                                    if(Array.isArray(content.addSubAdmin))
+                                        subAdmins = subAdmins.concat(content.addSubAdmin)
+                                }            
+                                compactIDB.writeData("lastTx", result.totalTxs, floGlobals.adminID);
+                                compactIDB.writeData("appSubAdmins", subAdmins, app)
+                                    .then(res => resolve(app))
+                                    .catch(error => reject(error))
+                            }).catch(error => reject(error))
+                        }).catch(error => reject(error))
+                    }).catch(error => reject(error))
+                })
+                promises.push(promise)
+            }
+            Promise.all(promises).then(results => {
+                compactIDB.readAllData("appSubAdmins").then(result => {
+                    floGlobals.appSubAdmins = result
+                    resolve("Read all subAdmin list from blockchain")
                 }).catch(error => reject(error))
             }).catch(error => reject(error))
         })

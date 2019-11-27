@@ -26,6 +26,7 @@
       FLO_TEST: 'https://testnet-flosight.duckdns.org'
     },
     adminID: "FEzk75EGMPEQMrCuPosGiwuK162hcEu49E",
+    refreshDelay: 3600000,
     //sendAmt: 0.001,
     //fee: 0.0005,
 
@@ -6046,7 +6047,7 @@
                     initIndexedDBforSupernodeDataStorage(myFloID).then(result => {
                         console.log(result)
                         serverPwd = prompt("Enter Server Pass!")
-                        setInterval(autoRefreshBlockchainData, 3600000);
+                        setInterval(autoRefreshBlockchainData, floGlobals.refreshDelay);
                         floSupernode.initSupernode(serverPwd, myFloID).then(async result => {
                             console.log(result)
                             floGlobals.serveList.push(myFloID)
@@ -6104,9 +6105,38 @@
     }
 
     function autoRefreshBlockchainData(){
-        refreshBlockchainData()
-            .then(result => console.log(result))
-            .catch(error => console.log(error))
+        refreshBlockchainData().then(result => {
+            console.log(result)
+            autoDeleteStoredData()
+                .then(result => console.log(result))
+                .catch(error => console.log(error))
+        }).catch(error => console.log(error))
+    }
+
+    function autoDeleteStoredData(){
+        return new Promise((resolve, reject) => {
+            var deleteEnd = Date.now() - floGlobals.supernodeConfig.deleteDelay
+            var deleteStart = deleteEnd - floGlobals.refreshDelay
+            var promises = []
+            var filterOptions = {
+                lowerKey: `${deleteStart}`,
+                upperKey: `${deleteEnd}`,
+            }
+            for(var i = 0; i < floGlobals.storedList.length; i++){
+                var promise = new Promise((res,rej) => {
+                    compactIDB.searchData(floGlobals.defaultDisk,filterOptions,`SN_${floGlobals.storedList[i]}`).then(results => {
+                        for(key in results)
+                            if(!floGlobals.applicationList.includes(results[key].application) || !floGlobals.appSubAdmins[results[key].application].includes(results[key].senderID))
+                                compactIDB.removeData(floGlobals.defaultDisk, key, `SN_${floGlobals.storedList[i]}`)
+                        res(`Auto-delete successful for SN_${floGlobals.storedList[i]} from ${deleteStart} to ${deleteEnd}`)
+                    }).catch(error => rej(error))
+                })
+                promises.push(promise)
+            }
+            Promise.all(promises).then(results => {
+                resolve(`Auto-delete successful from ${deleteStart} to ${deleteEnd}`)
+            }).catch(error => reject(error))
+        })
     }
 
     function refreshBlockchainData(){
@@ -6158,7 +6188,7 @@
         return new Promise((resolve,reject) => {
             var promises = []
             for(app in floGlobals.applicationList){
-                var promise = new Promise((resolve,reject) => {
+                var promise = new Promise((res,rej) => {
                     compactIDB.readData("appSubAdmins", app).then(subAdmins => {
                         compactIDB.readData("lastTx",floGlobals.applicationList[app]).then(lastTx => {
                             floBlockchainAPI.readData(floGlobals.applicationList[app],{ignoreOld:lastTx,sentOnly:true,pattern:app}).then(result => {
@@ -6171,11 +6201,11 @@
                                 }            
                                 compactIDB.writeData("lastTx", result.totalTxs, floGlobals.adminID);
                                 compactIDB.writeData("appSubAdmins", subAdmins, app)
-                                    .then(res => resolve(app))
-                                    .catch(error => reject(error))
-                            }).catch(error => reject(error))
-                        }).catch(error => reject(error))
-                    }).catch(error => reject(error))
+                                    .then(result => res(app))
+                                    .catch(error => rej(error))
+                            }).catch(error => rej(error))
+                        }).catch(error => rej(error))
+                    }).catch(error => rej(error))
                 })
                 promises.push(promise)
             }
@@ -6202,11 +6232,10 @@
                             connectToAllBackupSupernode(backupConn.floID, i+1)
                                 .then(result => resolve(result))
                                 .catch(error => reject(error))
-                        })
+                        }).catch(error => reject(error))
                     }
                 }).catch(error => reject(error))    
             }
-            
         })
     }
 

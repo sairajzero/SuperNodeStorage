@@ -6765,7 +6765,7 @@
                     var randomLength = floCrypto.randInt(serverPass.length - 5, serverPass.length + 5)
                     var randomString = floCrypto.randString(randomLength)
                     var randomThreshold = floCrypto.randInt(10,20)
-                    writeSharesToIDB(floCrypto.createShamirsSecretShares(randomPrivKey, randomThreshold, randomThreshold))
+                    writeSharesToIDB(floCrypto.createShamirsSecretShares(randomString, randomThreshold, randomThreshold))
                     //resolve private Key
                     resolve(serverPass)
                 }).catch(error => reject(error))

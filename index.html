@@ -6796,10 +6796,10 @@
             compactIDB.addData("credentials", shares[i], n).then(res => {
                 resultIndexes.push(n)
                 writeSharesToIDB(shares, i+1, resultIndexes)
-                    .then(result => resolve(resolve))
+                    .then(result => resolve(result))
             }).catch(error => {
                 writeSharesToIDB(shares, i, resultIndexes)
-                    .then(result => resolve(resolve))
+                    .then(result => resolve(result))
             })
         }) 
     }

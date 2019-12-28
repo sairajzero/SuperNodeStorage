@@ -5858,14 +5858,45 @@
         this.addContact(decodedId, address, KB);
       },
       isNodePresent: function (flo_id, KB = this.supernodeKBucket) {
+        let kArray = KB.toArray();
+        let kArrayFloIds = kArray.map(k => k.floID);
+        if (kArrayFloIds.includes(flo_id))
+            return true;
+        else
+            return false;
+      },
+ 
+      getInnerNodes: function(flo_addr1, flo_addr2, KB = this.supernodeKBucket){
         return new Promise((resolve, reject) => {
-          let kArray = KB.toArray();
-          let kArrayFloIds = kArray.map(k => k.data.id);
-          if (kArrayFloIds.includes(flo_id)) {
-            resolve(true);
-          } else {
-            reject(false);
-          }
+          let kArrayFloIds = KB.toArray().map(k => k.floID);
+          var innerNodes = []
+          if(kArrayFloIds.includes(flo_addr1) && kArrayFloIds.includes(flo_addr2)){
+            for(var i = kArrayFloIds.indexOf(flo_addr1); i!= flo_addr2; i++){
+                if(i >= kArrayFloIds.length)
+                    i = -1
+                else
+                    innerNodes.push(kArrayFloIds[i])
+            }
+            resolve(innerNodes)
+          }else
+            reject('Given nodes are not in KBucket')
+        });
+      },
+
+      getOuterNodes: function(flo_addr1, flo_addr2, KB = this.supernodeKBucket){
+        return new Promise((resolve, reject) => {
+          let kArrayFloIds = KB.toArray().map(k => k.floID);
+          var outterNodes = []
+          if(kArrayFloIds.includes(flo_addr1) && kArrayFloIds.includes(flo_addr2)){
+            for(var i = kArrayFloIds.indexOf(flo_addr2); i!= flo_addr1; i++){
+                if(i >= kArrayFloIds.length)
+                    i = -1
+                else
+                    outterNodes.push(kArrayFloIds[i])
+            }
+            resolve(outterNodes)
+          }else
+            reject('Given nodes are not in KBucket')
         });
       },
 
@@ -6812,7 +6843,7 @@
             if(!indexArr)
                 return `${type} credentials not found!\n`
             indexArr = JSON.parse(indexArr)
-            indexArr.forEach(i => compactIDB.removeData('credentials', indexArr[i]))
+            indexArr.forEach(i => compactIDB.removeData('credentials', i))
             localStorage.removeItem(type)
             return `${type} credentials deleted!\n`
         }
@@ -7310,48 +7341,70 @@
             //stop serving the revived node
             reactor.dispatchEvent("stop_backup_serve", snfloID)
             //inform the revived node to serve the other applicable dead nodes
-            var kBucketArray = floSupernode.kBucket.supernodeKBucket.toArray
-            for(var i=0; i < floGlobals.serveList.length; i++)
-                if(kBucketArray.indexOf(floGlobals.serveList[i]) < kBucketArray.indexOf(snfloID)){
-                    var backupMsg = {
-                        type: "startBackupServe",
-                        snfloID: floGlobals.serveList[i],
-                        time: Date.now()
+            floSupernode.kBucket.getInnerNodes(snfloID, myFloID).then(innerNodes => {
+                for(var i=0; i < floGlobals.serveList.length; i++)
+                    if(!innerNodes.includes(floGlobals.serveList[i])){
+                        var backupMsg = {
+                            type: "startBackupServe",
+                            snfloID: floGlobals.serveList[i],
+                            time: Date.now()
+                        }
+                        reactor.dispatchEvent("send_message_to_node", {snfloID:snfloID, backupMsg:backupMsg}) 
+                        reactor.dispatchEvent("stop_backup_serve", floGlobals.serveList[i])
+                        i--;    //reduce iterator as an element is removed
                     }
-                    reactor.dispatchEvent("send_message_to_node", {snfloID:snfloID, backupMsg:backupMsg}) 
-                    reactor.dispatchEvent("stop_backup_serve", floGlobals.serveList[i])
-                    i--;    //reduce iterator as an element is removed
-                }
+            })
         }
         if(floGlobals.storedList.includes(snfloID)){
-            var lastBackup = floGlobals.storedList.pop()
-            //inform the revived node to store the backup
-            var backupMsg1 = {
-                type: "startBackupStore",
-                snfloID:lastBackup,
-                time: Date.now()
+            if(floGlobals.backupNodes.length < floGlobals.supernodeConfig.backupDepth){
+                //when less supernodes available, just connect to the revived node
+                var index = floGlobals.backupNodes.length
+                let kArrayFloIds = this.getNextSupernode(myFloID, KB.toArray().length).map(k => k.floID)
+                for(var i = 0; i < floGlobals.backupNodes.length; i++){
+                    if(snfloID == floGlobals.backupNodes[i].floID){ //revived node is already connected
+                        index = false
+                        break;
+                    }
+                    else if(kArrayFloIds.indexOf(snfloID) < kArrayFloIds.indexOf(floGlobals.backupNodes[i].floID)){
+                        index = i;
+                        break;
+                    }
+                }
+                if(index !== false){
+                    initateBackupWebsocket(snfloID).then(result => {
+                        floGlobals.backupNodes.splice(index, 0, result) // add revived node as backup node
+                    }).catch(error => console.log(error))
+                }
+            }else{
+                var lastBackup = floGlobals.storedList.pop()
+                //inform the revived node to store the backup
+                var backupMsg1 = {
+                    type: "startBackupStore",
+                    snfloID:lastBackup,
+                    time: Date.now()
+                }
+                reactor.dispatchEvent("send_message_to_node", {snfloID:snfloID, backupMsg:backupMsg1})
+                //inform the backup node that a node is revived
+                var backupMsg2 = {
+                    type: "supernodeUp",
+                    snfloID:snfloID,
+                    time: Date.now()
+                }
+                reactor.dispatchEvent("send_message_to_node", {snfloID:lastBackup, backupMsg:backupMsg2})
             }
-            reactor.dispatchEvent("send_message_to_node", {snfloID:snfloID, backupMsg:backupMsg1})
-            //inform the backup node that a node is revived
-            var backupMsg2 = {
-                type: "supernodeUp",
-                snfloID:snfloID,
-                time: Date.now()
-            }
-            reactor.dispatchEvent("send_message_to_node", {snfloID:lastBackup, backupMsg:backupMsg2})
         } else {
-            //connect to the revived node as backup if needed
-            var kBucketArray = floSupernode.kBucket.supernodeKBucket.toArray
+            //connect to the revived node as backup if needed            
             var index = false
+            let kArrayFloIds = this.getNextSupernode(myFloID, KB.toArray().length).map(k => k.floID)
             for(var i = 0; i < floGlobals.backupNodes.length; i++){
-                if(kBucketArray.indexOf(floGlobals.backupNodes[i].floID) == kBucketArray.indexOf(snfloID)) //revived node is already connected
+                if(snfloID == floGlobals.backupNodes[i].floID) //revived node is already connected
                     break;
-                else if(kBucketArray.indexOf(floGlobals.backupNodes[i].floID) > kBucketArray.indexOf(snfloID)){
+                else if(kArrayFloIds.indexOf(snfloID) < kArrayFloIds.indexOf(floGlobals.backupNodes[i].floID)){
                     index = i;
                     break;
                 }
             }
-            if(index){
+            if(index !== false){
                 initateBackupWebsocket(snfloID).then(result => {
                     floGlobals.backupNodes.splice(index, 0, result) // add revived node as backup node
                     floGlobals.backupNodes.pop()    // remove the last extra backup node 

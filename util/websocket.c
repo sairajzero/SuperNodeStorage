@@ -6,9 +6,8 @@
 #include "mongoose.h"
 
 static sig_atomic_t s_signal_received = 0;
-static const char *s_http_port = "7130";
 static struct mg_serve_http_opts s_http_server_opts;
-static char server_pwd[100];
+static char *s_http_port, *server_pwd;
 static struct mg_connection *supernode_client = NULL;
 
 static void signal_handler(int sig_num) {
@@ -145,12 +144,8 @@ static void ev_handler(struct mg_connection *nc, int ev, void *ev_data) {
 
 int main(int argc, char** argv) {
 
-  if(argc<=1){
-    printf("Enter server password : ");
-    scanf("%s",server_pwd);
-  }
-  else
-    strcpy(server_pwd,argv[1]);
+  s_http_port = argv[1];
+  server_pwd = argv[2];
 
   struct mg_mgr mgr;
   struct mg_connection *nc;
@@ -164,7 +159,7 @@ int main(int argc, char** argv) {
 
   nc = mg_bind(&mgr, s_http_port, ev_handler);
   mg_set_protocol_http_websocket(nc);
-  s_http_server_opts.document_root = ".";  // Serve current directory
+  s_http_server_opts.document_root = "app/";  // Serve current directory
   s_http_server_opts.enable_directory_listing = "no";
 
   printf("Started on port %s\n", s_http_port);

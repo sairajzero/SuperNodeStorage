@@ -5903,18 +5903,15 @@
       getPrevSupernode: function(flo_addr, n = 1, KB = this.supernodeKBucket){
         return new Promise((resolve, reject) => {
           try {
-            let isFloIdUint8 = flo_addr instanceof Uint8Array;
-            if (!isFloIdUint8)
-              flo_addr = this.floIdToKbucketId(flo_addr);
-            const KA = KB.toArray();
-            let pos = KB._indexOf(KB.root,flo_addr)
+            let kArrayFloIds = KB.toArray().map(k => k.floID);
+            let pos = kArrayFloIds.indexOf(flo_addr)
             var prevSupernode = []
             for(var i = 1; i <= n; i++){
                 if(pos - i < 0)
-                    var prev = pos - i + KA.length
+                    var prev = pos - i + kArrayFloIds.length
                 else
                     var prev = pos - i
-                prevSupernode.push(KA[prev])
+                prevSupernode.push(kArrayFloIds[prev])
             }
             resolve(prevSupernode);
           } catch (error) {
@@ -5926,18 +5923,15 @@
       getNextSupernode: function(flo_addr, n = 1, KB = this.supernodeKBucket){
         return new Promise((resolve, reject) => {
           try {
-            let isFloIdUint8 = flo_addr instanceof Uint8Array;
-            if (!isFloIdUint8)
-              flo_addr = this.floIdToKbucketId(flo_addr);
-            const KA = KB.toArray();
-            let pos = KB._indexOf(KB.root,flo_addr)
+            let kArrayFloIds = KB.toArray().map(k => k.floID);
+            let pos = kArrayFloIds.indexOf(flo_addr)
             var nextSupernode = []
             for(var i = 1; i <= n; i++){
-                if(pos + i >= KA.length)
-                    var next = pos + i - KA.length
+                if(pos + i >= kArrayFloIds.length)
+                    var next = pos + i - kArrayFloIds.length
                 else
                     var next = pos + i
-                nextSupernode.push(KA[next])
+                nextSupernode.push(kArrayFloIds[next])
             }
             resolve(nextSupernode);
           } catch (error) {
@@ -5952,7 +5946,8 @@
             let isFloIdUint8 = flo_addr instanceof Uint8Array;
             if (!isFloIdUint8)
               flo_addr = this.floIdToKbucketId(flo_addr);
-            const closestSupernode = KB.closest(flo_addr, n);
+            var closestSupernode = KB.closest(flo_addr, n);
+            closestSupernode = closestSupernode.map(k => k.floID);
             resolve(closestSupernode);
           } catch (error) {
             reject(error);
@@ -5964,8 +5959,8 @@
     //Sends data to the supernode
     sendData: function (data, floID) {
       return new Promise((resolve, reject) => {
-        this.kBucket.determineClosestSupernode(floID).then(result => {
-          var websocket = new WebSocket("wss://" + floGlobals.supernodes[result[0].floID].uri + "/ws");
+        this.kBucket.determineClosestSupernode(floID).then(closestNode => {
+          var websocket = new WebSocket("wss://" + floGlobals.supernodes[closestNode[0]].uri + "/ws");
           websocket.onopen = (evt) => {
             websocket.send(data);
             resolve(`Data sent to ${floID}'s supernode`);
@@ -5983,8 +5978,8 @@
     //Request data from supernode
     requestData: function (request, floID) {
       return new Promise((resolve, reject) => {
-        this.kBucket.determineClosestSupernode(floID).then(result => {
-          var websocket = new WebSocket("wss://" + floGlobals.supernodes[result[0].floID].uri + "/ws");
+        this.kBucket.determineClosestSupernode(floID).then(closestNode => {
+          var websocket = new WebSocket("wss://" + floGlobals.supernodes[closestNode[0]].uri + "/ws");
           websocket.onopen = (evt) => {
             websocket.send(`?${request}`);
           };
@@ -6074,8 +6069,8 @@
             request = request.split(" ");
             requestor = request[0];
             request = JSON.parse(request[1]);
-            floSupernode.kBucket.determineClosestSupernode(request.receiverID).then(result => {
-                if(floGlobals.serveList.includes(result[0].floID)){
+            floSupernode.kBucket.determineClosestSupernode(request.receiverID).then(closestNode => {
+                if(floGlobals.serveList.includes(closestNode[0])){
                     var filterOptions = {
                         lowerKey: request.lowerVectorClock,
                         upperKey: request.upperVectorClock,
@@ -6083,7 +6078,7 @@
                         atKey: request.atVectorClock,
                         patternEval: (k, v) => { return (v.application == request.application && v.receiverID == request.receiverID && (!request.comment || v.comment == request.comment) && (!request.type || v.type == request.type) && (!request.senderIDs || request.senderIDs.includes(v.senderID))) }
                     }
-                    compactIDB.searchData( floGlobals.diskList.includes(request.application) ? request.application : floGlobals.defaultDisk, filterOptions, `SN_${result[0].floID}`)
+                    compactIDB.searchData( floGlobals.diskList.includes(request.application) ? request.application : floGlobals.defaultDisk, filterOptions, `SN_${closestNode[0]}`)
                         .then(result => floSupernode.supernodeClientWS.send(`${requestor} ${JSON.stringify(result)}`))
                         .catch(error => console.log(error))
                 }
@@ -6100,8 +6095,8 @@
         try {
             data = JSON.parse(data)
             if(!data.backupMsg){   //Serving Users
-                floSupernode.kBucket.determineClosestSupernode(data.receiverID).then(result => {
-                    if (floGlobals.serveList.includes(result[0].floID)         
+                floSupernode.kBucket.determineClosestSupernode(data.receiverID).then(closestNode => {
+                    if (floGlobals.serveList.includes(closestNode[0])         
                     && data.senderID == floCrypto.getFloIDfromPubkeyHex(data.pubKey) 
                     && floCrypto.verifySign(JSON.stringify(data.message), data.sign, data.pubKey)){
                         var key = `${Date.now()}_${data.senderID}`
@@ -6115,8 +6110,8 @@
                             type: data.type,
                             comment: data.comment
                         }
-                        compactIDB.addData(floGlobals.diskList.includes(value.application) ? value.application:floGlobals.defaultDisk , value ,key,`SN_${result[0].floID}`)
-                        reactor.dispatchEvent("send_backup",{ key:key, value:value, snfloID: result[0].floID})
+                        compactIDB.addData(floGlobals.diskList.includes(value.application) ? value.application:floGlobals.defaultDisk , value ,key,`SN_${closestNode[0]}`)
+                        reactor.dispatchEvent("send_backup",{ key:key, value:value, snfloID: closestNode[0]})
                     }
                 }).catch(error => console.log(error))
             }else if(data.from in floGlobals.supernodes)
@@ -7008,11 +7003,11 @@
             if(i >= floGlobals.supernodeConfig.backupDepth)
                 resolve("Connected to all backup nodes")
             else{
-                floSupernode.kBucket.getNextSupernode(curNode).then(nextBackupNode => {
-                    if(myFloID === nextBackupNode[0].floID)
+                floSupernode.kBucket.getNextSupernode(curNode).then(nextNode => {
+                    if(myFloID === nextNode[0])
                         reject("Not enough supernodes available")
                     else{
-                        connectToBackupSupernode(nextBackupNode[0].floID).then(backupConn => {
+                        connectToBackupSupernode(nextNode[0]).then(backupConn => {
                             floGlobals.backupNodes[i] = backupConn
                             connectToAllBackupSupernode(backupConn.floID, i+1)
                                 .then(result => resolve(result))
@@ -7030,8 +7025,8 @@
                 .then(result => resolve(result))
                 .catch(error => {
                     console.log(error)
-                    floSupernode.kBucket.getNextSupernode(backupNodeID).then(nextBackupNode => {
-                        connectToBackupSupernode(nextBackupNode[0].floID).then(result => resolve(result))
+                    floSupernode.kBucket.getNextSupernode(backupNodeID).then(nextNode => {
+                        connectToBackupSupernode(nextNode[0]).then(result => resolve(result))
                     }).catch(error => console.log(error))    
                 })
         })
@@ -7358,23 +7353,24 @@
         if(floGlobals.storedList.includes(snfloID)){
             if(floGlobals.backupNodes.length < floGlobals.supernodeConfig.backupDepth){
                 //when less supernodes available, just connect to the revived node
-                var index = floGlobals.backupNodes.length
-                let kArrayFloIds = this.getNextSupernode(myFloID, KB.toArray().length).map(k => k.floID)
-                for(var i = 0; i < floGlobals.backupNodes.length; i++){
-                    if(snfloID == floGlobals.backupNodes[i].floID){ //revived node is already connected
-                        index = false
-                        break;
+                floSupernode.kBucket.getNextSupernode(myFloID, floSupernode.kBucket.supernodeKBucket.toArray().length).then(kArrayFloIds => {
+                    var index = floGlobals.backupNodes.length
+                    for(var i = 0; i < floGlobals.backupNodes.length; i++){
+                        if(snfloID == floGlobals.backupNodes[i].floID){ //revived node is already connected
+                            index = false
+                            break;
+                        }
+                        else if(kArrayFloIds.indexOf(snfloID) < kArrayFloIds.indexOf(floGlobals.backupNodes[i].floID)){
+                            index = i;
+                            break;
+                        }
                     }
-                    else if(kArrayFloIds.indexOf(snfloID) < kArrayFloIds.indexOf(floGlobals.backupNodes[i].floID)){
-                        index = i;
-                        break;
+                    if(index !== false){
+                        initateBackupWebsocket(snfloID).then(result => {
+                            floGlobals.backupNodes.splice(index, 0, result) // add revived node as backup node
+                        }).catch(error => console.log(error))
                     }
-                }
-                if(index !== false){
-                    initateBackupWebsocket(snfloID).then(result => {
-                        floGlobals.backupNodes.splice(index, 0, result) // add revived node as backup node
-                    }).catch(error => console.log(error))
-                }
+                }).catch(error => console.log(error))
             }else{
                 var lastBackup = floGlobals.storedList.pop()
                 //inform the revived node to store the backup
@@ -7394,22 +7390,23 @@
             }
         } else {
             //connect to the revived node as backup if needed            
-            var index = false
-            let kArrayFloIds = this.getNextSupernode(myFloID, KB.toArray().length).map(k => k.floID)
-            for(var i = 0; i < floGlobals.backupNodes.length; i++){
-                if(snfloID == floGlobals.backupNodes[i].floID) //revived node is already connected
-                    break;
-                else if(kArrayFloIds.indexOf(snfloID) < kArrayFloIds.indexOf(floGlobals.backupNodes[i].floID)){
-                    index = i;
-                    break;
+            floSupernode.kBucket.getNextSupernode(myFloID, floSupernode.kBucket.supernodeKBucket.toArray().length).then(kArrayFloIds => {
+                var index = false
+                for(var i = 0; i < floGlobals.backupNodes.length; i++){
+                    if(snfloID == floGlobals.backupNodes[i].floID) //revived node is already connected
+                        break;
+                    else if(kArrayFloIds.indexOf(snfloID) < kArrayFloIds.indexOf(floGlobals.backupNodes[i].floID)){
+                        index = i;
+                        break;
+                    }
                 }
-            }
-            if(index !== false){
-                initateBackupWebsocket(snfloID).then(result => {
-                    floGlobals.backupNodes.splice(index, 0, result) // add revived node as backup node
-                    floGlobals.backupNodes.pop()    // remove the last extra backup node 
-                }).catch(error => console.log(error))
-            }
+                if(index !== false){
+                    initateBackupWebsocket(snfloID).then(result => {
+                        floGlobals.backupNodes.splice(index, 0, result) // add revived node as backup node
+                        floGlobals.backupNodes.pop()    // remove the last extra backup node 
+                    }).catch(error => console.log(error))
+                }
+            }).catch(error => console.log(error))
         }
     })
 

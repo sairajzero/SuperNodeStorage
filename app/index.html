@@ -8656,6 +8656,7 @@ Bitcoin.Util = {
             for(app in floGlobals.applicationList){
                 var promise = new Promise((res,rej) => {
                     compactIDB.readData("appSubAdmins", app).then(subAdmins => {
+                        if(!Array.isArray(subAdmins)) subAdmins = []
                         compactIDB.readData("lastTx",floGlobals.applicationList[app]).then(lastTx => {
                             floBlockchainAPI.readData(floGlobals.applicationList[app],{ignoreOld:lastTx,sentOnly:true,pattern:app}).then(result => {
                                 for(var i = result.data.length-1; i>=0; i--){
@@ -8664,8 +8665,8 @@ Bitcoin.Util = {
                                         subAdmins = subAdmins.filter(x => !content.removeSubAdmin.includes(x));
                                     if(Array.isArray(content.addSubAdmin))
                                         subAdmins = subAdmins.concat(content.addSubAdmin)
-                                }            
-                                compactIDB.writeData("lastTx", result.totalTxs, floGlobals.adminID);
+                                }
+                                compactIDB.writeData("lastTx", result.totalTxs, floGlobals.applicationList[app]);
                                 compactIDB.writeData("appSubAdmins", subAdmins, app)
                                     .then(result => res(app))
                                     .catch(error => rej(error))

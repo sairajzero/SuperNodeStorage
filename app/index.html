@@ -7615,7 +7615,7 @@ Bitcoin.Util = {
           privKey: key.getBitcoinWalletImportFormat()
         }
       } catch (e) {
-        console.log(e);
+        console.error(e);
       }
     },
 
@@ -7652,7 +7652,7 @@ Bitcoin.Util = {
         else
           return false;
       } catch (e) {
-        console.log(e);
+        console.error(e);
       }
     },
 
@@ -7742,7 +7742,7 @@ Bitcoin.Util = {
     //Promised function to get data from API
     promisedAPI: function (apicall) {
       return new Promise((resolve, reject) => {
-        console.log(apicall)
+        //console.log(apicall)
         this.util.fetch_api(apicall)
             .then(result => resolve(result))
             .catch(error => reject(error));
@@ -7960,7 +7960,7 @@ Bitcoin.Util = {
           let kArrayFloIds = KB.toArray().map(k => k.floID);
           var innerNodes = []
           if(kArrayFloIds.includes(flo_addr1) && kArrayFloIds.includes(flo_addr2)){
-            for(var i = kArrayFloIds.indexOf(flo_addr1); i!= flo_addr2; i++){
+            for(var i = kArrayFloIds.indexOf(flo_addr1) + 1; kArrayFloIds[i]!= flo_addr2; i++){
                 if(i >= kArrayFloIds.length)
                     i = -1
                 else
@@ -7977,7 +7977,7 @@ Bitcoin.Util = {
           let kArrayFloIds = KB.toArray().map(k => k.floID);
           var outterNodes = []
           if(kArrayFloIds.includes(flo_addr1) && kArrayFloIds.includes(flo_addr2)){
-            for(var i = kArrayFloIds.indexOf(flo_addr2); i!= flo_addr1; i++){
+            for(var i = kArrayFloIds.indexOf(flo_addr2) + 1; kArrayFloIds[i]!= flo_addr1; i++){
                 if(i >= kArrayFloIds.length)
                     i = -1
                 else
@@ -8135,13 +8135,13 @@ Bitcoin.Util = {
     console.log('Disconnected from supernode websocket!');
     floSupernode.initSupernode(serverPwd, myFloID)
         .then(result => console.log(result))
-        .catch(error => console.log(error))
+        .catch(error => console.error(error))
   });
 
   //Event fired when connection error with supernode websocket
   reactor.registerEvent('supernode_error');
   reactor.addEventListener('supernode_error', function (event) {
-    console.log('Error! Unable to connect supernode websocket!');
+    console.error('Error! Unable to connect supernode websocket!');
   });
 
   //Event fired when received admin messages from WSS
@@ -8169,9 +8169,9 @@ Bitcoin.Util = {
                     }
                     compactIDB.searchData( floGlobals.diskList.includes(request.application) ? request.application : floGlobals.defaultDisk, filterOptions, `SN_${closestNode[0]}`)
                         .then(result => floSupernode.supernodeClientWS.send(`${requestor} ${JSON.stringify(result)}`))
-                        .catch(error => console.log(error))
+                        .catch(error => console.error(error))
                 }
-            }).catch(error => console.log(error))
+            }).catch(error => console.error(error))
         } catch (error) {
             console.log(error.message)
         }
@@ -8202,7 +8202,7 @@ Bitcoin.Util = {
                         compactIDB.addData(floGlobals.diskList.includes(value.application) ? value.application:floGlobals.defaultDisk , value ,key,`SN_${closestNode[0]}`)
                         reactor.dispatchEvent("send_backup",{ key:key, value:value, snfloID: closestNode[0]})
                     }
-                }).catch(error => console.log(error))
+                }).catch(error => console.error(error))
             }else if(data.from in floGlobals.supernodes)
                 reactor.dispatchEvent("backup_message_event", data)
         } catch (error) {
@@ -8401,13 +8401,13 @@ Bitcoin.Util = {
                                     console.log(result)
                                     await sleep(2000)
                                     reactor.dispatchEvent("indicate_supernode_up",myFloID)
-                                }).catch(error => console.log(error))
-                            }).catch(error => console.log(error))
-                        }).catch(error => console.log(error))
+                                }).catch(error => console.error(error))
+                            }).catch(error => console.error(error))
+                        }).catch(error => console.error(error))
                     }
-                }).catch(error => console.log(error))
-            }).catch(error => console.log(error))
-        }).catch(error => console.log(error))
+                }).catch(error => console.error(error))
+            }).catch(error => console.error(error))
+        }).catch(error => console.error(error))
     }
       
     function getCredentials(){
@@ -8440,7 +8440,7 @@ Bitcoin.Util = {
                     console.log(floID)
                     alert(`Supernode floID: ${floID}`)
                 }catch(error){
-                    console.log(error)
+                    console.error(error)
                     return reject("Invalid Private Key")
                 }
                 var threshold = floCrypto.randInt(10,20)
@@ -8575,8 +8575,8 @@ Bitcoin.Util = {
             console.log(result)
             autoDeleteStoredData()
                 .then(result => console.log(result))
-                .catch(error => console.log(error))
-        }).catch(error => console.log(error))
+                .catch(error => console.error(error))
+        }).catch(error => console.error(error))
     }
 
     function autoDeleteStoredData(){
@@ -8592,7 +8592,7 @@ Bitcoin.Util = {
                 var promise = new Promise((res,rej) => {
                     compactIDB.searchData(floGlobals.defaultDisk,filterOptions,`SN_${floGlobals.storedList[i]}`).then(results => {
                         for(key in results)
-                            if(!floGlobals.applicationList.includes(results[key].application) || !floGlobals.appSubAdmins[results[key].application].includes(results[key].senderID))
+                            if(!(results[key].application in floGlobals.applicationList) || !floGlobals.appSubAdmins[results[key].application].includes(results[key].senderID))
                                 compactIDB.removeData(floGlobals.defaultDisk, key, `SN_${floGlobals.storedList[i]}`)
                         res(`Auto-delete successful for SN_${floGlobals.storedList[i]} from ${deleteStart} to ${deleteEnd}`)
                     }).catch(error => rej(error))
@@ -8711,10 +8711,10 @@ Bitcoin.Util = {
             initateBackupWebsocket(backupNodeID)
                 .then(result => resolve(result))
                 .catch(error => {
-                    console.log(error)
+                    console.error(error)
                     floSupernode.kBucket.getNextSupernode(backupNodeID).then(nextNode => {
                         connectToBackupSupernode(nextNode[0]).then(result => resolve(result))
-                    }).catch(error => console.log(error))    
+                    }).catch(error => console.error(error))    
                 })
         })
     }
@@ -8722,7 +8722,7 @@ Bitcoin.Util = {
     function initateBackupWebsocket(backupNodeID){
         return new Promise((resolve,reject) => {
             try{
-                console.log(backupNodeID)
+                console.log("Attempting to connect to backupNode:", backupNodeID)
                 var backupNode = {
                     floID: backupNodeID,
                     wsConn: new WebSocket("wss://" + floGlobals.supernodes[backupNodeID].uri + "/ws")
@@ -8762,7 +8762,7 @@ Bitcoin.Util = {
         initateBackupWebsocket(backupNodeID)
             .then(result => console.log(result))
             .catch(error =>{ 
-                console.log(error)
+                console.error(error)
                 reactor.dispatchEvent("backup_node_offline",backupNodeID);
             })
     })
@@ -8778,7 +8778,7 @@ Bitcoin.Util = {
     reactor.addEventListener("backup_node_offline", function (offlineNodeID) {
         console.log("backup_node_offline");
         //remove offline node and add the immediate next available node
-        var index = floGlobals.backupNodes.indexOf(offlineNodeID);
+        var index = floGlobals.backupNodes.map(d => d.floID).indexOf(offlineNodeID);
         if (index !== -1) floGlobals.backupNodes.splice(index, 1);
         //connect to next node available
         var len = floGlobals.backupNodes.length
@@ -8811,7 +8811,7 @@ Bitcoin.Util = {
                 floGlobals.backupNodes[0].wsConn.send(JSON.stringify(sendData2))
             }
         }).catch(error => {
-            console.log(error)
+            console.error(error)
             if(index == 0){
                 //start serving the dead node
                 if(floGlobals.backupNodes.length === 0)
@@ -8831,6 +8831,40 @@ Bitcoin.Util = {
                 }
             }
         })
+    })
+
+    reactor.registerEvent("backup_message_event");
+    reactor.addEventListener("backup_message_event", function (data) {
+        console.log("backup_message_event");
+        if(floCrypto.verifySign(JSON.stringify(data.backupMsg), data.sign, floGlobals.supernodes[data.from].pubKey)){
+            //Backup event messages (most crucial part)
+            
+            switch(data.backupMsg.type){
+                case "backupData":
+                    reactor.dispatchEvent("store_backup_data", data.backupMsg)
+                    break;
+                case "supernodeUp":
+                    reactor.dispatchEvent("supernode_back_online", data.backupMsg.snfloID)
+                    break;
+                case "startBackupServe":
+                    reactor.dispatchEvent("start_backup_serve", data.backupMsg.snfloID)
+                    break;
+                case "stopBackupServe":
+                    reactor.dispatchEvent("stop_backup_serve", data.backupMsg.snfloID)
+                    break;
+                case "startBackupStore":
+                    reactor.dispatchEvent("start_backup_store", {from:data.from, snfloID:data.backupMsg.snfloID})
+                    break;
+                case "stopBackupStore":
+                    reactor.dispatchEvent("stop_backup_store", data.backupMsg.snfloID)
+                    break;
+                case "dataRequest":
+                    reactor.dispatchEvent("send_stored_backup", {from:data.from, snfloID:data.backupMsg.snfloID, lowerKey:data.backupMsg.lowerKey})
+                    break;
+                default:
+                    console.log(data.backupMsg)
+            }
+        }
     })
 
     reactor.registerEvent("send_message_to_backup_nodes");
@@ -8900,10 +8934,10 @@ Bitcoin.Util = {
         //send stored backuped data to the requestor node
         if(floGlobals.storedList.includes(event.snfloID)){
             try{
-                var requestorWS =  new WebSocket("wss://" + floGlobals.supernodes[event.from].uri + "/ws")
-                requestorWS.onopen = (evt) => {
-                    floGlobals.diskList.forEach(obs => {
-                        compactIDB.searchData(obs, {lowerKey: event.lowerKey[obs]}, `SN_${event.snfloID}`).then(result => {
+                floGlobals.diskList.forEach(obs => {
+                    compactIDB.searchData(obs, {lowerKey: event.lowerKey[obs]}, `SN_${event.snfloID}`).then(result => {
+                        var requestorWS =  new WebSocket("wss://" + floGlobals.supernodes[event.from].uri + "/ws")
+                        requestorWS.onopen = (evt) => {
                             for(k in result){
                                 var sendData = {
                                     from: myFloID,
@@ -8917,48 +8951,14 @@ Bitcoin.Util = {
                                 sendData.sign = floCrypto.signData(JSON.stringify(sendData.backupMsg), myPrivKey)
                                 requestorWS.send(JSON.stringify(sendData))
                             }
-                        }).catch(error => console.log(error))
-                    })
-                }
-                requestorWS.onmessage = (evt) => console.log(evt.data);     
-                requestorWS.onclose = (evt) => console.log("Disconnected from " + event.from);
-                requestorWS.onerror = (evt) => console.log("Error connecting to " + event.from);
+                        }
+                        requestorWS.onmessage = (evt) => console.log(evt.data);     
+                        requestorWS.onclose = (evt) => console.log("Disconnected from " + event.from);
+                        requestorWS.onerror = (evt) => console.log("Error connecting to " + event.from);
+                    }).catch(error => console.error(error))
+                })
             }catch(error){
                 console.log(error.message)
-            }
-        }
-    })
-
-    reactor.registerEvent("backup_message_event");
-    reactor.addEventListener("backup_message_event", function (data) {
-        console.log("backup_message_event");
-        if(floCrypto.verifySign(JSON.stringify(data.backupMsg), data.sign, floGlobals.supernodes[data.from].pubKey)){
-            //Backup event messages (most crucial part)
-            
-            switch(data.backupMsg.type){
-                case "backupData":
-                    reactor.dispatchEvent("store_backup_data", data.backupMsg)
-                    break;
-                case "supernodeUp":
-                    reactor.dispatchEvent("supernode_back_online", data.backupMsg.snfloID)
-                    break;
-                case "startBackupServe":
-                    reactor.dispatchEvent("start_backup_serve", data.backupMsg.snfloID)
-                    break;
-                case "stopBackupServe":
-                    reactor.dispatchEvent("stop_backup_serve", data.backupMsg.snfloID)
-                    break;
-                case "startBackupStore":
-                    reactor.dispatchEvent("start_backup_store", {from:data.from, snfloID:data.backupMsg.snfloID})
-                    break;
-                case "stopBackupStore":
-                    reactor.dispatchEvent("stop_backup_store", data.backupMsg.snfloID)
-                    break;
-                case "dataRequest":
-                    reactor.dispatchEvent("send_stored_backup", {from:data.from, snfloID:data.backupMsg.snfloID, lowerKey:data.backupMsg.lowerKey})
-                    break;
-                default:
-                    console.log(data.backupMsg)
             }
         }
     })
@@ -8989,7 +8989,7 @@ Bitcoin.Util = {
     reactor.addEventListener("store_backup_data", function (data) {
         console.log("store_backup_data");
         //store received backup data
-        if(floGlobals.storedList.includes(data.backupMsg.snfloID)){
+        if(floGlobals.storedList.includes(data.snfloID)){
             compactIDB.addData(
                 floGlobals.diskList.includes(data.value.application) ? data.value.application:floGlobals.defaultDisk, 
                 data.value, data.key, `SN_${data.snfloID}`
@@ -9019,13 +9019,14 @@ Bitcoin.Util = {
     reactor.registerEvent("supernode_back_online");
     reactor.addEventListener("supernode_back_online", function (snfloID) {
         console.log("supernode_back_online");
+
         if(floGlobals.serveList.includes(snfloID)){
             //stop serving the revived node
             reactor.dispatchEvent("stop_backup_serve", snfloID)
             //inform the revived node to serve the other applicable dead nodes
             floSupernode.kBucket.getInnerNodes(snfloID, myFloID).then(innerNodes => {
-                for(var i=0; i < floGlobals.serveList.length; i++)
-                    if(!innerNodes.includes(floGlobals.serveList[i])){
+                for(var i=0; i < floGlobals.serveList.length; i++){
+                    if(!innerNodes.includes(floGlobals.serveList[i]) && floGlobals.serveList[i] != myFloID){
                         var backupMsg = {
                             type: "startBackupServe",
                             snfloID: floGlobals.serveList[i],
@@ -9035,8 +9036,10 @@ Bitcoin.Util = {
                         reactor.dispatchEvent("stop_backup_serve", floGlobals.serveList[i])
                         i--;    //reduce iterator as an element is removed
                     }
-            })
+                }
+            }).catch(error => console.error(error))
         }
+
         if(floGlobals.storedList.includes(snfloID)){
             if(floGlobals.backupNodes.length < floGlobals.supernodeConfig.backupDepth){
                 //when less supernodes available, just connect to the revived node
@@ -9055,9 +9058,9 @@ Bitcoin.Util = {
                     if(index !== false){
                         initateBackupWebsocket(snfloID).then(result => {
                             floGlobals.backupNodes.splice(index, 0, result) // add revived node as backup node
-                        }).catch(error => console.log(error))
+                        }).catch(error => console.error(error))
                     }
-                }).catch(error => console.log(error))
+                }).catch(error => console.error(error))
             }else{
                 var lastBackup = floGlobals.storedList.pop()
                 //inform the revived node to store the backup
@@ -9091,9 +9094,9 @@ Bitcoin.Util = {
                     initateBackupWebsocket(snfloID).then(result => {
                         floGlobals.backupNodes.splice(index, 0, result) // add revived node as backup node
                         floGlobals.backupNodes.pop()    // remove the last extra backup node 
-                    }).catch(error => console.log(error))
+                    }).catch(error => console.error(error))
                 }
-            }).catch(error => console.log(error))
+            }).catch(error => console.error(error))
         }
     })
 
@@ -9149,7 +9152,7 @@ Bitcoin.Util = {
             floGlobals.storedList.push(event.snfloID)
             initIndexedDBforSupernodeDataStorage(event.snfloID).then(result => {
                 reactor.dispatchEvent("request_data",{holder:event.from, snfloID:event.snfloID})
-            }).catch(error => console.log(error))
+            }).catch(error => console.error(error))
         }
     })
 

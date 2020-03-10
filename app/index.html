@@ -8593,7 +8593,7 @@ Bitcoin.Util = {
                 var promise = new Promise((res,rej) => {
                     compactIDB.searchData(floGlobals.defaultDisk,filterOptions,`SN_${floGlobals.storedList[i]}`).then(results => {
                         for(key in results)
-                            if(!(results[key].application in floGlobals.applicationList) || !floGlobals.appSubAdmins[results[key].application].includes(results[key].senderID))
+                            if(!(results[key].application in floGlobals.applicationList) || floGlobals.applicationList[results[key].application] != results[key].receiverID ||!floGlobals.appSubAdmins[results[key].application].includes(results[key].senderID))
                                 compactIDB.removeData(floGlobals.defaultDisk, key, `SN_${floGlobals.storedList[i]}`)
                         res(`Auto-delete successful for SN_${floGlobals.storedList[i]} from ${deleteStart} to ${deleteEnd}`)
                     }).catch(error => rej(error))

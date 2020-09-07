@@ -7624,25 +7624,35 @@ Bitcoin.Util = {
 
         //Returns public-key from private-key
         getPubKeyHex: function (privateKeyHex) {
+            if (!privateKeyHex)
+                return null;
             var key = new Bitcoin.ECKey(privateKeyHex);
-            if (key.priv == null) {
-                alert("Invalid Private key");
-                return;
-            }
+            if (key.priv == null)
+                return null;
             key.setCompressed(true);
             var pubkeyHex = key.getPubKeyHex();
             return pubkeyHex;
         },
 
-        //Returns flo-ID from public-key
-        getFloIDfromPubkeyHex: function (pubkeyHex) {
-            var key = new Bitcoin.ECKey().setPub(pubkeyHex);
-            var floID = key.getBitcoinAddress();
-            return floID;
+        //Returns flo-ID from public-key or private-key
+        getFloID: function (keyHex) {
+            if(!pubkeyHex)
+                return null;
+            try {
+                var key = new Bitcoin.ECKey(privateKeyHex);
+                if (key.priv == null)
+                    key.setPub(pubkeyHex);
+                var floID = key.getBitcoinAddress();
+                return floID;
+            } catch (e) {
+                return null;
+            }
         },
 
         //Verify the private-key for the given public-key or flo-ID
         verifyPrivKey: function (privateKeyHex, pubKey_floID, isfloID = true) {
+            if(!privateKeyHex || !pubKey_floID)
+                return false;
             try {
                 var key = new Bitcoin.ECKey(privateKeyHex);
                 if (key.priv == null)
@@ -7661,6 +7671,8 @@ Bitcoin.Util = {
 
         //Check if the given Address is valid or not
         validateAddr: function (inpAddr) {
+            if(!inpAddr)
+                return false;
             try {
                 var addr = new Bitcoin.Address(inpAddr);
                 return true;
@@ -7698,7 +7710,7 @@ Bitcoin.Util = {
                 }
                 return false;
             } catch {
-                return false
+                return false;
             }
         }
     }
@@ -7745,7 +7757,7 @@ Bitcoin.Util = {
         //Promised function to get data from API
         promisedAPI: function (apicall) {
             return new Promise((resolve, reject) => {
-                //console.log(apicall)
+                console.log(apicall)
                 this.util.fetch_api(apicall)
                     .then(result => resolve(result))
                     .catch(error => reject(error));
@@ -7762,22 +7774,24 @@ Bitcoin.Util = {
         },
 
         //Write Data into blockchain
-        writeData: function (senderAddr, Data, PrivKey, receiverAddr = floGlobals.adminID) {
+        writeData: function (senderAddr, data, privKey, receiverAddr = floGlobals.adminID) {
             return new Promise((resolve, reject) => {
-                this.sendTx(senderAddr, receiverAddr, floGlobals.sendAmt, PrivKey, Data)
+                if (typeof data != "string")
+                    data = JSON.stringify(data);
+                this.sendTx(senderAddr, receiverAddr, floGlobals.sendAmt, privKey, data)
                     .then(txid => resolve(txid))
                     .catch(error => reject(error))
             });
         },
 
         //Send Tx to blockchain 
-        sendTx: function (senderAddr, receiverAddr, sendAmt, PrivKey, floData = '') {
+        sendTx: function (senderAddr, receiverAddr, sendAmt, privKey, floData = '') {
             return new Promise((resolve, reject) => {
                 if (!floCrypto.validateAddr(senderAddr))
                     reject(`Invalid address : ${senderAddr}`);
                 else if (!floCrypto.validateAddr(receiverAddr))
                     reject(`Invalid address : ${receiverAddr}`);
-                if (PrivKey.length < 1 || !floCrypto.verifyPrivKey(PrivKey, senderAddr))
+                if (privKey.length < 1 || !floCrypto.verifyPrivKey(privKey, senderAddr))
                     reject("Invalid Private key!");
                 else if (typeof sendAmt !== 'number' || sendAmt <= 0)
                     reject(`Invalid sendAmt : ${sendAmt}`);
@@ -7801,8 +7815,8 @@ Bitcoin.Util = {
                             var change = utxoAmt - sendAmt - fee;
                             if (change > 0)
                                 trx.addoutput(senderAddr, change);
-                            trx.addflodata(floData);
-                            var signedTxHash = trx.sign(PrivKey, 1);
+                            trx.addflodata(floData.replace(/\n/g, ' '));
+                            var signedTxHash = trx.sign(privKey, 1);
                             this.broadcastTx(signedTxHash)
                                 .then(txid => resolve(txid))
                                 .catch(error => reject(error))
@@ -7812,11 +7826,237 @@ Bitcoin.Util = {
             });
         },
 
+        //merge all UTXOs of a given floID into a single UTXO
+        mergeUTXOs: function (floID, privKey, floData = '') {
+            return new Promise((resolve, reject) => {
+                if (!floCrypto.validateAddr(floID))
+                    return reject(`Invalid floID`);
+                if (!floCrypto.verifyPrivKey(privKey, floID))
+                    return reject("Invalid Private Key")
+
+                var trx = bitjs.transaction();
+                var utxoAmt = 0.0;
+                var fee = floGlobals.fee;
+                this.promisedAPI(`api/addr/${floID}/utxo`).then(utxos => {
+                    for (var i = utxos.length - 1; i >= 0; i--) {
+                        if (utxos[i].confirmations) {
+                            trx.addinput(utxos[i].txid, utxos[i].vout, utxos[i]
+                                .scriptPubKey)
+                            utxoAmt += utxos[i].amount;
+                        }
+                    }
+                    trx.addoutput(floID, utxoAmt - fee);
+                    trx.addflodata(floData.replace(/\n/g, ' '));
+                    var signedTxHash = trx.sign(privKey, 1);
+                    this.broadcastTx(signedTxHash)
+                        .then(txid => resolve(txid))
+                        .catch(error => reject(error))
+                }).catch(error => reject(error))
+            })
+        },
+
+        /**Write data into blockchain from (and/or) to multiple floID
+         * @param  {Array} senderPrivKeys List of sender private-keys
+         * @param  {string} data FLO data of the txn
+         * @param  {Array} receivers List of receivers
+         * @param  {boolean} preserveRatio (optional) preserve ratio or equal contribution
+         * @return {Promise}
+         */
+        writeDataMultiple: function (senderPrivKeys, data, receivers = [floGlobals.adminID], preserveRatio = true) {
+            return new Promise((resolve, reject) => {
+                if (!Array.isArray(senderPrivKeys))
+                    return reject("Invalid senderPrivKeys: SenderPrivKeys must be Array")
+                if (!preserveRatio) {
+                    let tmp = {};
+                    let amount = (floGlobals.sendAmt * receivers.length) / senderPrivKeys.length;
+                    senderPrivKeys.forEach(key => tmp[key] = amount);
+                    senderPrivKeys = tmp
+                }
+                if (!Array.isArray(receivers))
+                    return reject("Invalid receivers: Receivers must be Array")
+                else {
+                    let tmp = {};
+                    let amount = floGlobals.sendAmt;
+                    receivers.forEach(floID => tmp[floID] = amount);
+                    receivers = tmp
+                }
+                if (typeof data != "string")
+                    data = JSON.stringify(data);
+                this.sendTxMultiple(senderPrivKeys, receivers, data)
+                    .then(txid => resolve(txid))
+                    .catch(error => reject(error))
+            })
+        },
+
+        /**Send Tx from (and/or) to multiple floID
+         * @param  {Array or Object} senderPrivKeys List of sender private-key (optional: with coins to be sent)
+         * @param  {Object} receivers List of receivers with respective amount to be sent
+         * @param  {string} floData FLO data of the txn
+         * @return {Promise}
+         */
+        sendTxMultiple: function (senderPrivKeys, receivers, floData = '') {
+            return new Promise((resolve, reject) => {
+
+                let senders = {},
+                    preserveRatio;
+                //check for argument validations
+                try {
+                    let invalids = {
+                        InvalidSenderPrivKeys: [],
+                        InvalidSenderAmountFor: [],
+                        InvalidReceiverIDs: [],
+                        InvalidReceiveAmountFor: []
+                    }
+                    let inputVal = 0,
+                        outputVal = 0;
+                    //Validate sender privatekeys (and send amount if passed)
+                    //conversion when only privateKeys are passed (preserveRatio mode)
+                    if (Array.isArray(senderPrivKeys)) {
+                        senderPrivKeys.forEach(key => {
+                            try {
+                                if (!key)
+                                    invalids.InvalidSenderPrivKeys.push(key);
+                                else {
+                                    let floID = floCrypto.getFloID(key);
+                                    senders[floID] = {
+                                        wif: key
+                                    }
+                                }
+                            } catch (error) {
+                                invalids.InvalidSenderPrivKeys.push(key)
+                            }
+                        })
+                        preserveRatio = true;
+                    }
+                    //conversion when privatekeys are passed with send amount
+                    else {
+                        for (let key in senderPrivKeys) {
+                            try {
+                                if (!key)
+                                    invalids.InvalidSenderPrivKeys.push(key);
+                                else {
+                                    if (typeof senderPrivKeys[key] !== 'number' || senderPrivKeys[
+                                            key] <= 0)
+                                        invalids.InvalidSenderAmountFor.push(key)
+                                    else
+                                        inputVal += senderPrivKeys[key];
+                                    let floID = floCrypto.getFloID(key);
+                                    senders[floID] = {
+                                        wif: key,
+                                        coins: senderPrivKeys[key]
+                                    }
+                                }
+                            } catch (error) {
+                                invalids.InvalidSenderPrivKeys.push(key)
+                            }
+                        }
+                        preserveRatio = false;
+                    }
+                    //Validate the receiver IDs and receive amount
+                    for (let floID in receivers) {
+                        if (!floCrypto.validateAddr(floID))
+                            invalids.InvalidReceiverIDs.push(floID)
+                        if (typeof receivers[floID] !== 'number' || receivers[floID] <= 0)
+                            invalids.InvalidReceiveAmountFor.push(floID)
+                        else
+                            outputVal += receivers[floID];
+                    }
+                    //Reject if any invalids are found
+                    for (let i in invalids)
+                        if (!invalids[i].length)
+                            delete invalids[i];
+                    if (Object.keys(invalids).length)
+                        return reject(invalids);
+                    //Reject if given inputVal and outputVal are not equal
+                    if (!preserveRatio && inputVal != outputVal)
+                        return reject(
+                            `Input Amount (${inputVal}) not equal to Output Amount (${outputVal})`)
+                } catch (error) {
+                    return reject(error)
+                }
+                //Get balance of senders
+                let promises = []
+                for (let floID in senders)
+                    promises.push(this.getBalance(floID))
+                Promise.all(promises).then(results => {
+                    let totalBalance = 0,
+                        totalFee = floGlobals.fee,
+                        balance = {};
+                    //Divide fee among sender if not for preserveRatio
+                    if (!preserveRatio)
+                        var dividedFee = totalFee / Object.keys(senders).length;
+                    //Check if balance of each sender is sufficient enough
+                    let insufficient = [];
+                    for (let floID in senders) {
+                        balance[floID] = parseFloat(results.shift());
+                        if (isNaN(balance[floID]) || (preserveRatio && balance[floID] <=
+                                totalFee) || (!preserveRatio && balance[floID] < senders[floID]
+                                .coins + dividedFee))
+                            insufficient.push(floID)
+                        totalBalance += balance[floID];
+                    }
+                    if (insufficient.length)
+                        return reject({
+                            InsufficientBalance: insufficient
+                        })
+                    //Calculate totalSentAmount and check if totalBalance is sufficient
+                    let totalSendAmt = totalFee;
+                    for (floID in receivers)
+                        totalSendAmt += receivers[floID];
+                    if (totalBalance < totalSendAmt)
+                        return reject("Insufficient total Balance")
+                    //Get the UTXOs of the senders
+                    let promises = []
+                    for (floID in senders)
+                        promises.push(this.promisedAPI(`api/addr/${floID}/utxo`))
+                    Promise.all(promises).then(results => {
+                        let wifSeq = [];
+                        var trx = bitjs.transaction();
+                        for (floID in senders) {
+                            let utxos = results.shift();
+                            let sendAmt;
+                            if (preserveRatio) {
+                                let ratio = (balance[floID] / totalBalance);
+                                sendAmt = totalSendAmt * ratio;
+                            } else
+                                sendAmt = senders[floID].coins + dividedFee;
+                            let wif = senders[floID].wif;
+                            let utxoAmt = 0.0;
+                            for (let i = utxos.length - 1;
+                                (i >= 0) && (utxoAmt < sendAmt); i--) {
+                                if (utxos[i].confirmations) {
+                                    trx.addinput(utxos[i].txid, utxos[i].vout, utxos[i]
+                                        .scriptPubKey)
+                                    wifSeq.push(wif);
+                                    utxoAmt += utxos[i].amount;
+                                }
+                            }
+                            if (utxoAmt < sendAmt)
+                                return reject("Insufficient balance:" + floID);
+                            let change = (utxoAmt - sendAmt);
+                            if (change > 0)
+                                trx.addoutput(floID, change);
+                        }
+                        for (floID in receivers)
+                            trx.addoutput(floID, receivers[floID]);
+                        trx.addflodata(floData.replace(/\n/g, ' '));
+                        for (let i = 0; i < wifSeq.length; i++)
+                            trx.signinput(i, wifSeq[i], 1);
+                        var signedTxHash = trx.serialize();
+                        this.broadcastTx(signedTxHash)
+                            .then(txid => resolve(txid))
+                            .catch(error => reject(error))
+                    }).catch(error => reject(error))
+                }).catch(error => reject(error))
+            })
+        },
+
         //Broadcast signed Tx in blockchain using API
         broadcastTx: function (signedTxHash) {
             return new Promise((resolve, reject) => {
                 var request = new XMLHttpRequest();
                 var url = this.util.serverList[this.util.curPos] + 'api/tx/send';
+                console.log(url)
                 if (signedTxHash.length < 1)
                     reject("Empty Signature");
                 else {
@@ -7866,7 +8106,7 @@ Bitcoin.Util = {
         filter      : custom filter funtion for floData (eg . filter: d => {return d[0] == '$'})
         */
         readData: function (addr, options = {}) {
-            options.limit = options.limit | 1000
+            options.limit = options.limit | 0
             options.ignoreOld = options.ignoreOld | 0
             return new Promise((resolve, reject) => {
                 this.promisedAPI(`api/addrs/${addr}/txs?from=0&to=1`).then(response => {
@@ -7881,13 +8121,17 @@ Bitcoin.Util = {
                                 if (options.sentOnly && response.items[i].vin[0].addr !==
                                     addr)
                                     continue;
-                                if (options.pattern && !response.items[i].floData
-                                    .startsWith(options.pattern, 0) && !response.items[i]
-                                    .floData.startsWith(options.pattern, 2))
-                                    continue;
-                                if (options.contains && !response.items[i].floData.includes(
-                                        options.contains))
-                                    continue;
+                                if (options.pattern) {
+                                    try {
+                                        let jsonContent = JSON.parse(response.items[i]
+                                            .floData)
+                                        if (!Object.keys(jsonContent).includes(options
+                                                .pattern))
+                                            continue;
+                                    } catch (error) {
+                                        continue;
+                                    }
+                                }
                                 if (options.filter && !options.filter(response.items[i]
                                         .floData))
                                     continue;
@@ -8097,7 +8341,7 @@ Bitcoin.Util = {
                 this.connect(snID)
                     .then(node => resolve(node))
                     .catch(error => {
-                        if(reverse)
+                        if (reverse)
                             var nxtNode = this.kBucket.prevNode(snID);
                         else
                             var nxtNode = this.kBucket.nextNode(snID);
@@ -8215,17 +8459,16 @@ Bitcoin.Util = {
             else { //Serving Users
 
                 //Delete request from receiver
-                if(data.delete){
+                if (data.delete) {
                     let closeNode = floSupernode.kBucket.closestNode(data.from);
-                    if (floGlobals.serveList.includes(closeNode) && 
-                    data.senderID == floCrypto.getFloIDfromPubkeyHex(data.pubKey) &&
-                    floCrypto.verifySign(JSON.stringify(data.delete), data.sign, data.pubKey)) {
+                    if (floGlobals.serveList.includes(closeNode) &&
+                        data.senderID == floCrypto.getFloIDfromPubkeyHex(data.pubKey) &&
+                        floCrypto.verifySign(JSON.stringify(data.delete), data.sign, data.pubKey)) {
                         //start the deletion process
 
                         //indicate backup nodes to delete data
                     }
-                }
-                else{
+                } else {
                     let closeNode = floSupernode.kBucket.closestNode(data.receiverID)
                     if (floGlobals.serveList.includes(closeNode) &&
                         data.senderID == floCrypto.getFloIDfromPubkeyHex(data.pubKey) &&
@@ -8241,14 +8484,15 @@ Bitcoin.Util = {
                             type: data.type,
                             comment: data.comment
                         }
-                        compactIDB.addData(floGlobals.diskList.includes(value.application) ? value.application : floGlobals
+                        compactIDB.addData(floGlobals.diskList.includes(value.application) ? value.application :
+                            floGlobals
                             .defaultDisk, value, key, `SN_${closeNode}`)
                         sendBackupData(key, value, closeNode);
                     }
                 }
             }
-            
-            if((refreshData.countdown--) <=0 )
+
+            if ((refreshData.countdown--) <= 0)
                 refreshData();
         } catch (error) {
             console.log(error.message);
@@ -8268,7 +8512,7 @@ Bitcoin.Util = {
     const compactIDB = {
 
         setDefaultDB: function (dbName) {
-            this.dbName = dbName;
+            this.defaultDB = dbName;
         },
 
         initDB: function (dbName, objectStores = {}, version = null, removeStores = []) {
@@ -8313,7 +8557,7 @@ Bitcoin.Util = {
             });
         },
 
-        openDB: function (dbName = this.dbName) {
+        openDB: function (dbName = this.defaultDB) {
             return new Promise((resolve, reject) => {
                 var idb = indexedDB.open(dbName);
                 idb.onerror = (event) => reject("Error in opening IndexedDB!");
@@ -8321,7 +8565,7 @@ Bitcoin.Util = {
             });
         },
 
-        deleteDB: function (dbName = this.dbName) {
+        deleteDB: function (dbName = this.defaultDB) {
             return new Promise((resolve, reject) => {
                 var deleteReq = indexedDB.deleteDatabase(dbName);;
                 deleteReq.onerror = (event) => reject("Error deleting database!");
@@ -8329,7 +8573,7 @@ Bitcoin.Util = {
             });
         },
 
-        writeData: function (obsName, data, key = false, dbName = this.dbName) {
+        writeData: function (obsName, data, key = false, dbName = this.defaultDB) {
             return new Promise((resolve, reject) => {
                 this.openDB(dbName).then(db => {
                     var obs = db.transaction(obsName, "readwrite").objectStore(obsName);
@@ -8343,7 +8587,7 @@ Bitcoin.Util = {
             });
         },
 
-        addData: function (obsName, data, key = false, dbName = this.dbName) {
+        addData: function (obsName, data, key = false, dbName = this.defaultDB) {
             return new Promise((resolve, reject) => {
                 this.openDB(dbName).then(db => {
                     var obs = db.transaction(obsName, "readwrite").objectStore(obsName);
@@ -8357,7 +8601,7 @@ Bitcoin.Util = {
             });
         },
 
-        removeData: function (obsName, key, dbName = this.dbName) {
+        removeData: function (obsName, key, dbName = this.defaultDB) {
             return new Promise((resolve, reject) => {
                 this.openDB(dbName).then(db => {
                     var obs = db.transaction(obsName, "readwrite").objectStore(obsName);
@@ -8383,7 +8627,7 @@ Bitcoin.Util = {
             });
         },
 
-        readData: function (obsName, key, dbName = this.dbName) {
+        readData: function (obsName, key, dbName = this.defaultDB) {
             return new Promise((resolve, reject) => {
                 this.openDB(dbName).then(db => {
                     var obs = db.transaction(obsName, "readonly").objectStore(obsName);
@@ -8397,7 +8641,7 @@ Bitcoin.Util = {
             });
         },
 
-        readAllData: function (obsName, dbName = this.dbName) {
+        readAllData: function (obsName, dbName = this.defaultDB) {
             return new Promise((resolve, reject) => {
                 this.openDB(dbName).then(db => {
                     var obs = db.transaction(obsName, "readonly").objectStore(obsName);
@@ -8419,7 +8663,7 @@ Bitcoin.Util = {
             });
         },
 
-        searchData: function (obsName, options = {}, dbName = this.dbName) {
+        searchData: function (obsName, options = {}, dbName = this.defaultDB) {
             options.lowerKey = options.atKey || options.lowerKey || 0
             options.upperKey = options.atKey || options.upperKey || false
             options.patternEval = options.patternEval || ((k, v) => {
@@ -8473,7 +8717,8 @@ Bitcoin.Util = {
                     if (myFloID in floGlobals.supernodes) {
                         initIndexedDBforSupernodeDataStorage(myFloID).then(result => {
                             console.log(result)
-                            refreshData.countdown = floGlobals.supernodeConfig.refreshDelay;
+                            refreshData.countdown = floGlobals.supernodeConfig
+                                .refreshDelay;
                             floSupernode.initSupernode(serverPwd, myFloID).then(
                                 async result => {
                                     console.log(result)
@@ -8481,13 +8726,13 @@ Bitcoin.Util = {
                                     floGlobals.storedList.push(myFloID)
                                     await sleep(5000);
                                     connectToAllBackupSupernode()
-                                    .then(result => console.log(result))
-                                    .catch(error => console.error(error))
-                                    .finally(async _ => {
-                                        console.log(result)
-                                        await sleep(2000);
-                                        indicateSupernodeUp();
-                                    })
+                                        .then(result => console.log(result))
+                                        .catch(error => console.error(error))
+                                        .finally(async _ => {
+                                            console.log(result)
+                                            await sleep(2000);
+                                            indicateSupernodeUp();
+                                        })
                                 }).catch(error => console.error(error))
                         }).catch(error => console.error(error))
                     }
@@ -8653,7 +8898,7 @@ Bitcoin.Util = {
                 "comment"
             ];
             var idbObj = {}
-            for( let d of floGlobals.diskList) {
+            for (let d of floGlobals.diskList) {
                 idbObj[d] = {
                     indexes: {}
                 }
@@ -8724,56 +8969,58 @@ Bitcoin.Util = {
 
     function readSupernodeConfigFromAPI(flag = true) {
         return new Promise((resolve, reject) => {
-                compactIDB.readData("lastTx", floGlobals.adminID).then(lastTx => {
-                    floBlockchainAPI.readData(floGlobals.adminID, {
-                        ignoreOld: lastTx,
-                        sendOnly: true,
-                        pattern: "SuperNodeStorage"
-                    }).then(result => {
-                        let promises = []
-                        let newNodes = []
-                        let delNodes = []
-                        for (var i = result.data.length - 1; i >= 0; i--) {
-                            var content = JSON.parse(result.data[i]).SuperNodeStorage;
-                            for (sn in content.removeNodes) {
-                                promises.push(compactIDB.removeData("supernodes", sn))
-                                delNodes.push(sn)
-                            }
-                            for (sn in content.addNodes) {
-                                promises.push(compactIDB.writeData("supernodes", content
-                                    .addNodes[sn], sn))
-                                newNodes.push(sn)
-                            }
-                            for (c in content.config)
-                                promises.push(compactIDB.writeData("config", content
-                                    .config[c], c))
-                            for (app in content.application)
-                                promises.push(compactIDB.writeData("applications",
-                                    content.application[app], app))
+            compactIDB.readData("lastTx", floGlobals.adminID).then(lastTx => {
+                floBlockchainAPI.readData(floGlobals.adminID, {
+                    ignoreOld: lastTx,
+                    sendOnly: true,
+                    pattern: "SuperNodeStorage"
+                }).then(result => {
+                    let promises = []
+                    let newNodes = []
+                    let delNodes = []
+                    for (var i = result.data.length - 1; i >= 0; i--) {
+                        var content = JSON.parse(result.data[i]).SuperNodeStorage;
+                        for (sn in content.removeNodes) {
+                            promises.push(compactIDB.removeData("supernodes", sn))
+                            delNodes.push(sn)
                         }
-                        compactIDB.writeData("lastTx", result.totalTxs, floGlobals.adminID);
-                        Promise.all(promises).then(results => {
-                            readDataFromIDB().then(result => {
-                                migrateData(newNodes, delNodes, flag).then(result => {
-                                    console.info(result)
-                                    resolve("Read Supernode Data from Blockchain")
-                                }).catch(error => reject(error))
+                        for (sn in content.addNodes) {
+                            promises.push(compactIDB.writeData("supernodes", content
+                                .addNodes[sn], sn))
+                            newNodes.push(sn)
+                        }
+                        for (c in content.config)
+                            promises.push(compactIDB.writeData("config", content
+                                .config[c], c))
+                        for (app in content.application)
+                            promises.push(compactIDB.writeData("applications",
+                                content.application[app], app))
+                    }
+                    compactIDB.writeData("lastTx", result.totalTxs, floGlobals.adminID);
+                    Promise.all(promises).then(results => {
+                        readDataFromIDB().then(result => {
+                            migrateData(newNodes, delNodes, flag).then(
+                            result => {
+                                console.info(result)
+                                resolve(
+                                    "Read Supernode Data from Blockchain")
                             }).catch(error => reject(error))
                         }).catch(error => reject(error))
                     }).catch(error => reject(error))
                 }).catch(error => reject(error))
-            })
+            }).catch(error => reject(error))
+        })
     }
 
     function readDataFromIDB() {
 
         const dataList = {
-            supernodes: "supernodes", 
+            supernodes: "supernodes",
             supernodeConfig: "config",
             applicationList: "applications"
         }
 
-        const readIDB = function(name, obs){
+        const readIDB = function (name, obs) {
             return new Promise((res, rej) => {
                 compactIDB.readAllData(obs).then(data => {
                     floGlobals[name] = data;
@@ -8784,12 +9031,12 @@ Bitcoin.Util = {
 
         return new Promise((resolve, reject) => {
             let promises = []
-            for(let d in dataList)
+            for (let d in dataList)
                 promises.push(readIDB(d, dataList[d]))
             Promise.all(promises)
-            .then(results => resolve("Read data from IDB"))
-            .catch(error => reject(error))
-        }) 
+                .then(results => resolve("Read data from IDB"))
+                .catch(error => reject(error))
+        })
     }
 
     function readAppSubAdminListFromAPI() {
@@ -8841,9 +9088,9 @@ Bitcoin.Util = {
     /*Supernode Backup and migration functions*/
     function connectToAllBackupSupernode(curNode = myFloID, i = 0) {
         return new Promise((resolve, reject) => {
-            if (floGlobals.backupNodes.length > i){
+            if (floGlobals.backupNodes.length > i) {
                 let rmNodes = floGlobals.backupNodes.splice(i, floGlobals.backupNodes.length);
-                for(node of rmNodes)
+                for (node of rmNodes)
                     node.wsConn.close();
             }
             if (i >= floGlobals.supernodeConfig.backupDepth)
@@ -8855,15 +9102,15 @@ Bitcoin.Util = {
                 else {
                     let flag = false;
                     initateBackupWebsocket(nxtNode).then(node => {
-                        console.warn(`Connected to backup node: ${node.floID}`)
-                        floGlobals.backupNodes[i] = node
-                        flag = true;
-                    }).catch(error => console.error(error))
-                    .finally( _ => {
-                        connectToAllBackupSupernode(nxtNode, flag ? i + 1 : i)
-                            .then(result => resolve(result))
-                            .catch(error => reject(error))
-                    })
+                            console.warn(`Connected to backup node: ${node.floID}`)
+                            floGlobals.backupNodes[i] = node
+                            flag = true;
+                        }).catch(error => console.error(error))
+                        .finally(_ => {
+                            connectToAllBackupSupernode(nxtNode, flag ? i + 1 : i)
+                                .then(result => resolve(result))
+                                .catch(error => reject(error))
+                        })
                 }
             }
         })
@@ -8871,74 +9118,74 @@ Bitcoin.Util = {
 
     function initateBackupWebsocket(nodeID) {
         return new Promise((resolve, reject) => {
-                console.log("Attempting to connect to backupNode:", nodeID)
-                floSupernode.connect(nodeID).then(node => {
-                    node.wsConn.onmessage = (evt) => {
-                        if(evt.data === "$-")
-                            replaceOfflineBackupNode(nodeID);
-                    }
-                    node.wsConn.onclose = (evt) => {
-                        let i = floGlobals.backupNodes.map(d => d.floID).indexOf(nodeID);
-                        if(i !== -1)
-                            initateBackupWebsocket(nodeID)
-                            .then(bNode => floGlobals.backupNodes[i] = bNode)
-                            .catch(error => replaceOfflineBackupNode(nodeID))
-                    }
-                    backupNode = {
-                        floID: node.snID,
-                        wsConn: node.wsConn
-                    }
-                    resolve(backupNode);
-                }).catch(error => reject(error))
+            console.log("Attempting to connect to backupNode:", nodeID)
+            floSupernode.connect(nodeID).then(node => {
+                node.wsConn.onmessage = (evt) => {
+                    if (evt.data === "$-")
+                        replaceOfflineBackupNode(nodeID);
+                }
+                node.wsConn.onclose = (evt) => {
+                    let i = floGlobals.backupNodes.map(d => d.floID).indexOf(nodeID);
+                    if (i !== -1)
+                        initateBackupWebsocket(nodeID)
+                        .then(bNode => floGlobals.backupNodes[i] = bNode)
+                        .catch(error => replaceOfflineBackupNode(nodeID))
+                }
+                backupNode = {
+                    floID: node.snID,
+                    wsConn: node.wsConn
+                }
+                resolve(backupNode);
+            }).catch(error => reject(error))
         })
     }
 
     function replaceOfflineBackupNode(offlineNodeID) {
         //remove offline node and add the immediate next available node
         var index = floGlobals.backupNodes.map(d => d.floID).indexOf(offlineNodeID);
-        if (index === -1)   //return if offineNode is not a backupNode
-            return      
+        if (index === -1) //return if offineNode is not a backupNode
+            return
         floGlobals.backupNodes.splice(index, 1);
         //connect to next node available
         var len = floGlobals.backupNodes.length
         connectToAllBackupSupernode(len == 0 ? offlineNodeID : floGlobals.backupNodes[len - 1], len).then(result => {
-            console.log(result)
-            //inform the newly connected node to store backups of all serving
-            for( let sn of  floGlobals.serveList){
-                var sendData = {
-                    from: myFloID,
-                    sn_msg: {
-                        type: "startBackupStore",
-                        snID: sn,
-                        time: Date.now()
-                    }
-                }
-                sendData.sign = floCrypto.signData(JSON.stringify(sendData.sn_msg), myPrivKey)
-                floGlobals.backupNodes[len].wsConn.send(JSON.stringify(sendData))
-            }
-        }).catch(error => console.error(error))
-        .finally ( _ => {           
-            if (index === 0) {
-                //start serving the dead node
-                if (floGlobals.backupNodes.length === 0){
-                    for(let sn in floGlobals.supernodes)
-                        startBackupServe(sn)
-                }
-                //inform the immediate next node of the dead to start serving it
-                else {
+                console.log(result)
+                //inform the newly connected node to store backups of all serving
+                for (let sn of floGlobals.serveList) {
                     var sendData = {
                         from: myFloID,
                         sn_msg: {
-                            type: "startBackupServe",
-                            snID: offlineNodeID,
+                            type: "startBackupStore",
+                            snID: sn,
                             time: Date.now()
                         }
                     }
                     sendData.sign = floCrypto.signData(JSON.stringify(sendData.sn_msg), myPrivKey)
-                    floGlobals.backupNodes[0].wsConn.send(JSON.stringify(sendData))
+                    floGlobals.backupNodes[len].wsConn.send(JSON.stringify(sendData))
                 }
-            }
-        })
+            }).catch(error => console.error(error))
+            .finally(_ => {
+                if (index === 0) {
+                    //start serving the dead node
+                    if (floGlobals.backupNodes.length === 0) {
+                        for (let sn in floGlobals.supernodes)
+                            startBackupServe(sn)
+                    }
+                    //inform the immediate next node of the dead to start serving it
+                    else {
+                        var sendData = {
+                            from: myFloID,
+                            sn_msg: {
+                                type: "startBackupServe",
+                                snID: offlineNodeID,
+                                time: Date.now()
+                            }
+                        }
+                        sendData.sign = floCrypto.signData(JSON.stringify(sendData.sn_msg), myPrivKey)
+                        floGlobals.backupNodes[0].wsConn.send(JSON.stringify(sendData))
+                    }
+                }
+            })
     }
 
     function processDataFromSupernode(data) {
@@ -8987,7 +9234,7 @@ Bitcoin.Util = {
             sn_msg: sn_msg,
             sign: floCrypto.signData(JSON.stringify(sn_msg), myPrivKey)
         }
-        for(let node of floGlobals.backupNodes)
+        for (let node of floGlobals.backupNodes)
             node.wsConn.send(JSON.stringify(data))
     }
 
@@ -9042,7 +9289,7 @@ Bitcoin.Util = {
 
     function requestBackupData(from, snID) {
         var promises = []
-        for(let i in floGlobals.diskList)
+        for (let i in floGlobals.diskList)
             promises[i] = compactIDB.searchData(floGlobals.diskList[i], {
                 lastOnly: true
             }, `SN_${snID}`)
@@ -9062,8 +9309,8 @@ Bitcoin.Util = {
     }
 
     function storeBackupData(data) {
-        if (floGlobals.storedList.includes(data.snID) && 
-        floSupernode.kBucket.closestNode(data.value.receiverID) === data.snID) {
+        if (floGlobals.storedList.includes(data.snID) &&
+            floSupernode.kBucket.closestNode(data.value.receiverID) === data.snID) {
             compactIDB.addData(
                 floGlobals.diskList.includes(data.value.application) ? data.value.application : floGlobals
                 .defaultDisk,
@@ -9074,7 +9321,7 @@ Bitcoin.Util = {
 
     function indicateSupernodeUp() {
         console.log("Indicating supernode is up")
-        if(floGlobals.backupNodes.length){
+        if (floGlobals.backupNodes.length) {
             //inform all other nodes
             var data = {
                 from: myFloID,
@@ -9085,14 +9332,14 @@ Bitcoin.Util = {
             }
             data.sign = floCrypto.signData(JSON.stringify(data.sn_msg), myPrivKey)
             let dataStr = JSON.stringify(data)
-            for(let sn in floGlobals.supernodes){
-                if(sn !== myFloID){
+            for (let sn in floGlobals.supernodes) {
+                if (sn !== myFloID) {
                     floSupernode.connect(sn)
-                    .then(node => {
-                        node.wsConn.send(dataStr);
-                        console.info('data sent to :'+ sn)
-                        node.wsConn.close();
-                    }).catch(error => console.error(error))
+                        .then(node => {
+                            node.wsConn.send(dataStr);
+                            console.info('data sent to :' + sn)
+                            node.wsConn.close();
+                        }).catch(error => console.error(error))
                 }
             }
             //Inform backup nodes to store self
@@ -9105,8 +9352,9 @@ Bitcoin.Util = {
             //request self data from backup
             requestBackupData(floGlobals.backupNodes[0].floID, myFloID)
         } else {
-            let nodeList = floSupernode.kBucket.prevNode(myFloID, floSupernode.kBucket.supernodeKBucket.toArray().length-1)
-            for(sn of nodeList){
+            let nodeList = floSupernode.kBucket.prevNode(myFloID, floSupernode.kBucket.supernodeKBucket.toArray()
+                .length - 1)
+            for (sn of nodeList) {
                 startBackupStore(sn);
                 startBackupServe(sn);
             }
@@ -9125,81 +9373,85 @@ Bitcoin.Util = {
             if (floGlobals.serveList.includes(snID)) {
                 stopBackupServe(snID);
                 //inform the revived node to serve the other applicable dead nodes
-                    let iNodes = floSupernode.kBucket.innerNodes(snID, myFloID)
-                    data.sn_msg.time = Date.now();
-                    for (let sn of floGlobals.serveList.slice()){
-                        if (!iNodes.includes(sn) && sn != myFloID) {
-                            data.sn_msg.snID = sn;
-                            data.sn_msg.type = "startBackupStore";
-                            data.sign = floCrypto.signData(JSON.stringify(data.sn_msg), myPrivKey);
-                            node.wsConn.send(JSON.stringify(data))
-                            data.sn_msg.type = "startBackupServe";
-                            data.sign = floCrypto.signData(JSON.stringify(data.sn_msg), myPrivKey);
-                            node.wsConn.send(JSON.stringify(data))
-                            stopBackupServe(sn);
-                        }
-                    }
-            }
-
-            if (floGlobals.backupNodes.length < floGlobals.supernodeConfig.backupDepth) {
-            //when less supernodes available, just connect to the revived node
-            let nxtNodes = floSupernode.kBucket.nextNode(myFloID, floSupernode.kBucket.supernodeKBucket.toArray().length)
-            var index = floGlobals.backupNodes.length
-            for (let i in floGlobals.backupNodes) {
-                if (snID == floGlobals.backupNodes[i].floID) { //revived node is already connected
-                    index = false
-                    break;
-                } else if (nxtNodes.indexOf(snID) < nxtNodes.indexOf(floGlobals.backupNodes[i].floID)) {
-                    index = i;
-                    break;
-                }
-            }
-            if (index !== false) {
-                initateBackupWebsocket(snID).then(result => {
-                    floGlobals.backupNodes.splice(index, 0, result) // add revived node as backup node
-                    //inform node on the list of backups to store
-                    data.sn_msg.time = Date.now();
-                    data.sn_msg.type = "startBackupStore";
-                    for(let sn of floGlobals.serveList){
-                        data.sn_msg.snID = sn;
-                        data.sign = floCrypto.signData(JSON.stringify(data.sn_msg), myPrivKey);
-                        node.wsConn.send(JSON.stringify(data))
-                    }
-                }).catch(error => console.error(error))
-            }
-        } else {
-            //connect to the revived node as backup if needed
-            let nxtNodes = floSupernode.kBucket.nextNode(myFloID, floSupernode.kBucket.supernodeKBucket.toArray()
-                .length)
-            var index = false
-            for (let i in floGlobals.backupNodes) {
-                if (snID == floGlobals.backupNodes[i].floID) //revived node is already connected
-                    break;
-                else if (nxtNodes.indexOf(snID) < nxtNodes.indexOf(floGlobals.backupNodes[i].floID)) {
-                    index = i;
-                    break;
-                }
-            }
-            console.info(index)
-            if (index !== false) {
-                initateBackupWebsocket(snID).then(result => {
-                    floGlobals.backupNodes.splice(index, 0, result) // add revived node as backup node
-                    let rmNode = floGlobals.backupNodes.pop() // remove the last extra backup node 
-                    //inform node on the list of backups to store and inform removed node to stop storing
-                    data.sn_msg.time = Date.now();
-                    for(let sn of floGlobals.serveList){
+                let iNodes = floSupernode.kBucket.innerNodes(snID, myFloID)
+                data.sn_msg.time = Date.now();
+                for (let sn of floGlobals.serveList.slice()) {
+                    if (!iNodes.includes(sn) && sn != myFloID) {
                         data.sn_msg.snID = sn;
                         data.sn_msg.type = "startBackupStore";
                         data.sign = floCrypto.signData(JSON.stringify(data.sn_msg), myPrivKey);
-                        node.wsConn.send(JSON.stringify(data))      //start for connected backup node
-                        data.sn_msg.type = "stopBackupStore";
+                        node.wsConn.send(JSON.stringify(data))
+                        data.sn_msg.type = "startBackupServe";
                         data.sign = floCrypto.signData(JSON.stringify(data.sn_msg), myPrivKey);
-                        rmNode.wsConn.send(JSON.stringify(data))    //stop for removed backup node
+                        node.wsConn.send(JSON.stringify(data))
+                        stopBackupServe(sn);
                     }
-
-                }).catch(error => console.error(error))
+                }
             }
-        }
+
+            if (floGlobals.backupNodes.length < floGlobals.supernodeConfig.backupDepth) {
+                //when less supernodes available, just connect to the revived node
+                let nxtNodes = floSupernode.kBucket.nextNode(myFloID, floSupernode.kBucket.supernodeKBucket
+                    .toArray().length)
+                var index = floGlobals.backupNodes.length
+                for (let i in floGlobals.backupNodes) {
+                    if (snID == floGlobals.backupNodes[i].floID) { //revived node is already connected
+                        index = false
+                        break;
+                    } else if (nxtNodes.indexOf(snID) < nxtNodes.indexOf(floGlobals.backupNodes[i].floID)) {
+                        index = i;
+                        break;
+                    }
+                }
+                if (index !== false) {
+                    initateBackupWebsocket(snID).then(result => {
+                        floGlobals.backupNodes.splice(index, 0,
+                            result) // add revived node as backup node
+                        //inform node on the list of backups to store
+                        data.sn_msg.time = Date.now();
+                        data.sn_msg.type = "startBackupStore";
+                        for (let sn of floGlobals.serveList) {
+                            data.sn_msg.snID = sn;
+                            data.sign = floCrypto.signData(JSON.stringify(data.sn_msg), myPrivKey);
+                            node.wsConn.send(JSON.stringify(data))
+                        }
+                    }).catch(error => console.error(error))
+                }
+            } else {
+                //connect to the revived node as backup if needed
+                let nxtNodes = floSupernode.kBucket.nextNode(myFloID, floSupernode.kBucket.supernodeKBucket
+                    .toArray()
+                    .length)
+                var index = false
+                for (let i in floGlobals.backupNodes) {
+                    if (snID == floGlobals.backupNodes[i].floID) //revived node is already connected
+                        break;
+                    else if (nxtNodes.indexOf(snID) < nxtNodes.indexOf(floGlobals.backupNodes[i].floID)) {
+                        index = i;
+                        break;
+                    }
+                }
+                console.info(index)
+                if (index !== false) {
+                    initateBackupWebsocket(snID).then(result => {
+                        floGlobals.backupNodes.splice(index, 0,
+                            result) // add revived node as backup node
+                        let rmNode = floGlobals.backupNodes.pop() // remove the last extra backup node 
+                        //inform node on the list of backups to store and inform removed node to stop storing
+                        data.sn_msg.time = Date.now();
+                        for (let sn of floGlobals.serveList) {
+                            data.sn_msg.snID = sn;
+                            data.sn_msg.type = "startBackupStore";
+                            data.sign = floCrypto.signData(JSON.stringify(data.sn_msg), myPrivKey);
+                            node.wsConn.send(JSON.stringify(data)) //start for connected backup node
+                            data.sn_msg.type = "stopBackupStore";
+                            data.sign = floCrypto.signData(JSON.stringify(data.sn_msg), myPrivKey);
+                            rmNode.wsConn.send(JSON.stringify(data)) //stop for removed backup node
+                        }
+
+                    }).catch(error => console.error(error))
+                }
+            }
         })
     }
 
@@ -9221,7 +9473,7 @@ Bitcoin.Util = {
         var index = floGlobals.serveList.indexOf(snID);
         if (index !== -1 && snID !== myFloID) {
             floGlobals.serveList.splice(index, 1);
-            if(floGlobals.backupNodes.length == floGlobals.supernodeConfig.backupDepth){
+            if (floGlobals.backupNodes.length == floGlobals.supernodeConfig.backupDepth) {
                 //indicate the last backup node to stop storing the revived's backup
                 var lastIndex = floGlobals.backupNodes.length - 1
                 if (lastIndex !== -1) {
@@ -9236,7 +9488,7 @@ Bitcoin.Util = {
                     data.sign = floCrypto.signData(JSON.stringify(data.sn_msg), myPrivKey)
                     floGlobals.backupNodes[lastIndex].wsConn.send(JSON.stringify(data))
                 }
-            }            
+            }
             console.warn("BackupServe stopped for " + snID);
         }
     }
@@ -9245,7 +9497,7 @@ Bitcoin.Util = {
         if (!floGlobals.storedList.includes(snID)) {
             floGlobals.storedList.push(snID)
             initIndexedDBforSupernodeDataStorage(snID).then(result => {
-                if(from)
+                if (from)
                     requestBackupData(from, snID);
                 console.warn("BackupStore started for " + snID);
             }).catch(error => console.error(error))
@@ -9268,36 +9520,37 @@ Bitcoin.Util = {
             floSupernode.kBucket.launch().then(result => {
                 intimateNodes(flag); //intimate all other nodes
                 connectToAllBackupSupernode()
-                .then(result => console.log(result))
-                .catch(error => console.error(error))
-                .finally(async _ => {
-                    await sleep(300000);
-                    newNodes.forEach(node => {
-                        //transfer data to new node if required
-                        let prevNode = floSupernode.kBucket.prevNode(node);
-                        if (floGlobals.serveList.includes(prevNode))
-                            transferData(prevNode, node)
-                        let nextNode = floSupernode.kBucket.nextNode(node);
-                        if (floGlobals.serveList.includes(nextNode))
-                            transferData(nextNode, node)
+                    .then(result => console.log(result))
+                    .catch(error => console.error(error))
+                    .finally(async _ => {
+                        await sleep(300000);
+                        newNodes.forEach(node => {
+                            //transfer data to new node if required
+                            let prevNode = floSupernode.kBucket.prevNode(node);
+                            if (floGlobals.serveList.includes(prevNode))
+                                transferData(prevNode, node)
+                            let nextNode = floSupernode.kBucket.nextNode(node);
+                            if (floGlobals.serveList.includes(nextNode))
+                                transferData(nextNode, node)
+                        })
+                        delNodes.forEach(node => {
+                            //split the data to its prev and next nodes
+                            let KB = floSupernode.kBucket.constructKB(Object.keys(
+                                floGlobals
+                                .supernodes).concat(node).sort());
+                            let prevNode = floSupernode.kBucket.prevNode(node, 1, KB);
+                            let nextNode = floSupernode.kBucket.nextNode(node, 1, KB);
+                            if (floGlobals.serveList.includes(nextNode))
+                                splitData(node, prevNode, nextNode);
+                        })
+                        resolve("Data migration")
                     })
-                    delNodes.forEach(node => {
-                        //split the data to its prev and next nodes
-                        let KB = floSupernode.kBucket.constructKB(Object.keys(floGlobals
-                            .supernodes).concat(node).sort());
-                        let prevNode = floSupernode.kBucket.prevNode(node, 1, KB);
-                        let nextNode = floSupernode.kBucket.nextNode(node, 1, KB);
-                        if (floGlobals.serveList.includes(nextNode))
-                            splitData(node, prevNode, nextNode);
-                    })
-                    resolve("Data migration")
-                })
             }).catch(error => reject(error))
         })
     }
 
-    function intimateNodes(flag){
-        if(!flag) //skip intimate if already intimated
+    function intimateNodes(flag) {
+        if (!flag) //skip intimate if already intimated
             return;
         //intimate all nodes that there is change in supernode list
         var data = {
@@ -9309,18 +9562,18 @@ Bitcoin.Util = {
         }
         data.sign = floCrypto.signData(JSON.stringify(data.sn_msg), myPrivKey)
         let dataStr = JSON.stringify(data)
-        for(let sn in floGlobals.supernodes){
-            if(sn !== myFloID){
+        for (let sn in floGlobals.supernodes) {
+            if (sn !== myFloID) {
                 floSupernode.connect(sn)
-                .then(node => {
-                    node.wsConn.send(dataStr);
-                    node.wsConn.close();
-                }).catch(error => console.error(error))
+                    .then(node => {
+                        node.wsConn.send(dataStr);
+                        node.wsConn.close();
+                    }).catch(error => console.error(error))
             }
         }
     }
 
-    function iniateRefresh(){
+    function iniateRefresh() {
         readSupernodeConfigFromAPI(false)
             .then(result => console.log(result))
             .catch(error => console.error(error))
@@ -9334,7 +9587,8 @@ Bitcoin.Util = {
                     compactIDB.readAllData(obs, `SN_${snID}`).then(result => {
                         let promises = []
                         for (let k in result) {
-                            if (floSupernode.kBucket.closestNode(result[k].receiverID) ===
+                            if (floSupernode.kBucket.closestNode(result[k]
+                                .receiverID) ===
                                 toID) {
                                 var data = {
                                     from: myFloID,
@@ -9345,10 +9599,12 @@ Bitcoin.Util = {
                                         value: result[k]
                                     }
                                 }
-                                data.sign = floCrypto.signData(JSON.stringify(data.sn_msg),
+                                data.sign = floCrypto.signData(JSON.stringify(data
+                                        .sn_msg),
                                     myPrivKey)
                                 node.wsConn.send(JSON.stringify(data));
-                                promises.push(compactIDB.removeData(obs, k, `SN_${snID}`))
+                                promises.push(compactIDB.removeData(obs, k,
+                                    `SN_${snID}`))
                             }
                         }
                         Promise.all(promises).then(r => {}).catch(e => {})
@@ -9393,7 +9649,8 @@ Bitcoin.Util = {
                     compactIDB.readAllData(obs, `SN_${snID}`).then(result => {
                         let promises = []
                         for (let k in result) {
-                            if (floSupernode.kBucket.closestNode(result[k].receiverID) ===
+                            if (floSupernode.kBucket.closestNode(result[k]
+                                .receiverID) ===
                                 prev) {
                                 var data = {
                                     from: myFloID,
@@ -9404,7 +9661,8 @@ Bitcoin.Util = {
                                         value: result[k]
                                     }
                                 }
-                                data.sign = floCrypto.signData(JSON.stringify(data.sn_msg),
+                                data.sign = floCrypto.signData(JSON.stringify(data
+                                        .sn_msg),
                                     myPrivKey)
                                 node.wsConn.send(JSON.stringify(data));
                             } else

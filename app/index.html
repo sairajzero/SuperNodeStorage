@@ -25,7 +25,7 @@
       FLO: ['https://explorer.mediciland.com/', 'https://livenet.flocha.in/', 'https://flosight.duckdns.org/', 'http://livenet-explorer.floexperiments.com'],
       FLO_TEST: ['https://testnet-flosight.duckdns.org', 'https://testnet.flocha.in/']
     },
-    adminID: "FEzk75EGMPEQMrCuPosGiwuK162hcEu49E",
+    SNStorageID: "FEzk75EGMPEQMrCuPosGiwuK162hcEu49E",
     //sendAmt: 0.001,
     //fee: 0.0005,
 
@@ -8157,160 +8157,136 @@ Bitcoin.Util = {
 
         //kBucket object 
         kBucket: {
-            supernodeKBucket: null,
-            decodeBase58Address: function (address) {
-                let k = bitjs.Base58.decode(address)
-                k.shift()
-                k.splice(-4, 4)
-                return Crypto.util.bytesToHex(k)
-            },
-            floIdToKbucketId: function (address) {
-                const decodedId = this.decodeBase58Address(address);
-                const nodeIdBigInt = new BigInteger(decodedId, 16);
-                const nodeIdBytes = nodeIdBigInt.toByteArrayUnsigned();
-                const nodeIdNewInt8Array = new Uint8Array(nodeIdBytes);
-                return nodeIdNewInt8Array;
-            },
+            SNKB: null,
+            SNCO: null,
 
-            constructKB: function (list, refID = floGlobals.adminID) {
-                const KBoptions = {
-                    localNodeId: this.floIdToKbucketId(refID)
-                }
-                let KB = new BuildKBucket(KBoptions);
-                for (var i = 0; i < list.length; i++) {
-                    this.addNewNode(list[i], KB)
-                }
-                return KB;
-            },
+            util: {
+                decodeID(floID) {
+                    let k = bitjs.Base58.decode(floID)
+                    k.shift()
+                    k.splice(-4, 4)
+                    const decodedId = Crypto.util.bytesToHex(k);
+                    const nodeIdBigInt = new BigInteger(decodedId, 16);
+                    const nodeIdBytes = nodeIdBigInt.toByteArrayUnsigned();
+                    const nodeIdNewInt8Array = new Uint8Array(nodeIdBytes);
+                    return nodeIdNewInt8Array;
+                },
 
+                addNode: function (floID, KB) {
+                    let decodedId = this.decodeID(floID);
+                    const contact = {
+                        id: decodedId,
+                        floID: floID
+                    };
+                    KB.add(contact)
+                },
+
+                removeNode: function (floID, KB) {
+                    let decodedId = this.decodeID(floID);
+                    KB.remove(decodedId)
+                },
+
+                isPresent: function (floID, KB) {
+                    let kArray = KB.toArray().map(k => k.floID);
+                    return kArray.includes(floID)
+                },
+
+                distanceOf: function (floID, KB) {
+                    let decodedId = this.decodeID(floID);
+                    return KB.distance(KB.localNodeId, decodedId);
+                },
+
+                closest: function (floID, n, KB) {
+                    let decodedId = this.decodeID(floID);
+                    return KB.closest(flo_addr, n)
+                },
+
+                constructKB: function (list, refID) {
+                    const KBoptions = {
+                        localNodeId: this.decodeID(refID)
+                    };
+                    let KB = new BuildKBucket(KBoptions);
+                    for (let id of list)
+                        this.addNode(id, KB)
+                    return KB;
+                }
+            },
 
             launch: function () {
                 return new Promise((resolve, reject) => {
-                    let superNodeList = Object.keys(floGlobals.supernodes);
-                    let masterID = floGlobals.adminID;
                     try {
-                        this.supernodeKBucket = this.constructKB(superNodeList, masterID);
+                        let superNodeList = Object.keys(floGlobals.supernodes);
+                        let masterID = floGlobals.SNStorageID;
+                        this.SNKB = this.util.constructKB(superNodeList, masterID);
+                        this.SNCO = superNodeList.map(sn => [this.util.distance(sn, this.SNKB), sn])
+                            .sort((a, b) => a[0] - b[0])
+                            .map(a => a[1])
+                        console.log(this.SNCO)
+                        console.log(this.SNKB)
                         resolve('Supernode KBucket formed');
                     } catch (error) {
                         reject(error);
                     }
                 });
             },
-            addContact: function (id, floID, KB = this.supernodeKBucket) {
-                const contact = {
-                    id: id,
-                    floID: floID
-                };
-                KB.add(contact)
-            },
-            addNewNode: function (address, KB = this.supernodeKBucket) {
-                let decodedId = address;
-                try {
-                    decodedId = this.floIdToKbucketId(address);
-                } catch (e) {
-                    decodedId = address;
+
+            innerNodes: function (id1, id2) {
+                if (!this.SNCO.includes(id1) || !this.SNCO.includes(id2))
+                    throw Error('Given nodes are not supernode');
+                let iNodes = []
+                for (let i = this.SNCO.indexOf(id1) + 1; this.SNCO[i] != id2; i++) {
+                    if (i < this.SNCO.length)
+                        iNodes.push(this.SNCO[i])
+                    else i = -1
                 }
-                this.addContact(decodedId, address, KB);
-            },
-            isNodePresent: function (flo_id, KB = this.supernodeKBucket) {
-                let kArray = KB.toArray();
-                let kArrayFloIds = kArray.map(k => k.floID);
-                if (kArrayFloIds.includes(flo_id))
-                    return true;
-                else
-                    return false;
+                return iNodes
             },
 
-            innerNodes: function (flo_addr1, flo_addr2, KB = this.supernodeKBucket) {
-                let kArrayFloIds = KB.toArray().map(k => k.floID);
-                var iNodes = []
-                if (kArrayFloIds.includes(flo_addr1) && kArrayFloIds.includes(flo_addr2)) {
-                    for (var i = kArrayFloIds.indexOf(flo_addr1) + 1; kArrayFloIds[i] != flo_addr2; i++) {
-                        if (i >= kArrayFloIds.length)
-                            i = -1
-                        else
-                            iNodes.push(kArrayFloIds[i])
-                    }
-                    return iNodes;
-                } else
-                    throw Error('Given nodes are not in KBucket')
+            outterNodes: function (id1, id2) {
+                if (!this.SNCO.includes(id1) || !this.SNCO.includes(id2))
+                    throw Error('Given nodes are not supernode');
+                let oNodes = []
+                for (let i = this.SNCO.indexOf(id2) + 1; this.SNCO[i] != id1; i++) {
+                    if (i < this.SNCO.length)
+                        oNodes.push(this.SNCO[i])
+                    else i = -1
+                }
+                return oNodes
             },
 
-            outterNodes: function (flo_addr1, flo_addr2, KB = this.supernodeKBucket) {
-                let kArrayFloIds = KB.toArray().map(k => k.floID);
-                var oNodes = []
-                if (kArrayFloIds.includes(flo_addr1) && kArrayFloIds.includes(flo_addr2)) {
-                    for (var i = kArrayFloIds.indexOf(flo_addr2) + 1; kArrayFloIds[i] != flo_addr1; i++) {
-                        if (i >= kArrayFloIds.length)
-                            i = -1
-                        else
-                            oNodes.push(kArrayFloIds[i])
-                    }
-                    return oNodes
-                } else
-                    throw Error('Given nodes are not in KBucket')
+            prevNode: function (id, n = 1) {
+                if (!this.SNCO.includes(id))
+                    throw Error('Given node is not supernode');
+                if (!n) n = this.SNCO.length;
+                let pNodes = []
+                for (let i = 0, j = this.SNCO.indexOf(id) - 1; i < n; j--) {
+                    if (j == this.SNCO.indexOf(id))
+                        break;
+                    else if (j > -1)
+                        pNodes[i++] = this.SNCO[j]
+                    else j = this.SNCO.length
+                }
+                return (n == 1 ? pNodes[0] : pNodes)
             },
 
-            prevNode: function (flo_addr, n = 1, KB = this.supernodeKBucket) {
-                let kArrayFloIds = KB.toArray().map(k => k.floID);
-                let pos = kArrayFloIds.indexOf(flo_addr)
-                if (pos === -1)
-                    return false;
-                var pNodes = []
-                for (var i = 1; i <= n; i++) {
-                    if (pos - i < 0)
-                        var prev = pos - i + kArrayFloIds.length
-                    else
-                        var prev = pos - i
-                    pNodes.push(kArrayFloIds[prev])
+            nextNode: function (id, n = 1) {
+                if (!this.SNCO.includes(id))
+                    throw Error('Given node is not supernode');
+                if (!n) n = this.SNCO.length;
+                let nNodes = []
+                for (let i = 0, j = this.SNCO.indexOf(id) + 1; i < n; j++) {
+                    if (j == this.SNCO.indexOf(id))
+                        break;
+                    else if (j < this.SNCO.length)
+                        nNodes[i++] = this.SNCO[j]
+                    else j = -1
                 }
-                switch (pNodes.length) {
-                    case 0:
-                        return null;
-                    case 1:
-                        return pNodes[0];
-                    default:
-                        return pNodes;
-                }
+                return (n == 1 ? nNodes[0] : nNodes)
             },
 
-            nextNode: function (flo_addr, n = 1, KB = this.supernodeKBucket) {
-                let kArrayFloIds = KB.toArray().map(k => k.floID);
-                let pos = kArrayFloIds.indexOf(flo_addr)
-                if (pos === -1)
-                    return false;
-                var nNodes = []
-                for (var i = 1; i <= n; i++) {
-                    if (pos + i >= kArrayFloIds.length)
-                        var next = pos + i - kArrayFloIds.length
-                    else
-                        var next = pos + i
-                    nNodes.push(kArrayFloIds[next])
-                }
-                switch (nNodes.length) {
-                    case 0:
-                        return null;
-                    case 1:
-                        return nNodes[0];
-                    default:
-                        return nNodes;
-                }
-            },
-
-            closestNode: function (flo_addr, n = 1, KB = this.supernodeKBucket) {
-                let isFloIdUint8 = flo_addr instanceof Uint8Array;
-                if (!isFloIdUint8)
-                    flo_addr = this.floIdToKbucketId(flo_addr);
-                var cNode = KB.closest(flo_addr, n);
-                cNode = cNode.map(k => k.floID);
-                switch (cNode.length) {
-                    case 0:
-                        return null;
-                    case 1:
-                        return cNode[0];
-                    default:
-                        return cNode;
-                }
+            closestNode: function (id, n = 1) {
+                let cNodes = this.util.closest(id, n).map(k => k.floID)
+                return (n == 1 ? cNodes[0] : cNodes)
             }
         },
 
@@ -8969,8 +8945,8 @@ Bitcoin.Util = {
 
     function readSupernodeConfigFromAPI(flag = true) {
         return new Promise((resolve, reject) => {
-            compactIDB.readData("lastTx", floGlobals.adminID).then(lastTx => {
-                floBlockchainAPI.readData(floGlobals.adminID, {
+            compactIDB.readData("lastTx", floGlobals.SNStorageID).then(lastTx => {
+                floBlockchainAPI.readData(floGlobals.SNStorageID, {
                     ignoreOld: lastTx,
                     sendOnly: true,
                     pattern: "SuperNodeStorage"
@@ -8996,7 +8972,7 @@ Bitcoin.Util = {
                             promises.push(compactIDB.writeData("applications",
                                 content.application[app], app))
                     }
-                    compactIDB.writeData("lastTx", result.totalTxs, floGlobals.adminID);
+                    compactIDB.writeData("lastTx", result.totalTxs, floGlobals.SNStorageID);
                     Promise.all(promises).then(results => {
                         readDataFromIDB().then(result => {
                             migrateData(newNodes, delNodes, flag).then(
@@ -9253,6 +9229,7 @@ Bitcoin.Util = {
         var sn_msg = {
             type: "backupData",
             snID: snID,
+            time: Data.now(),
             key: key,
             value: value
         }
@@ -9273,6 +9250,7 @@ Bitcoin.Util = {
                                 sn_msg: {
                                     type: "backupData",
                                     snID: snID,
+                                    time: Data.now(),
                                     key: k,
                                     value: result[k]
                                 }
@@ -9337,7 +9315,7 @@ Bitcoin.Util = {
                     floSupernode.connect(sn)
                         .then(node => {
                             node.wsConn.send(dataStr);
-                            console.info('data sent to :' + sn)
+                            console.info('Indicated:' + sn)
                             node.wsConn.close();
                         }).catch(error => console.error(error))
                 }
@@ -9352,7 +9330,7 @@ Bitcoin.Util = {
             //request self data from backup
             requestBackupData(floGlobals.backupNodes[0].floID, myFloID)
         } else {
-            let nodeList = floSupernode.kBucket.prevNode(myFloID, floSupernode.kBucket.supernodeKBucket.toArray()
+            let nodeList = floSupernode.kBucket.prevNode(myFloID, floSupernode.kBucket.SNKB.toArray()
                 .length - 1)
             for (sn of nodeList) {
                 startBackupStore(sn);
@@ -9364,7 +9342,7 @@ Bitcoin.Util = {
     function nodeBackOnline(snID) {
 
         floSupernode.connect(snID).then(node => {
-
+            console.info(`Node online: ${snID}`)
             var data = {
                 from: myFloID,
                 sn_msg: {}
@@ -9391,7 +9369,7 @@ Bitcoin.Util = {
 
             if (floGlobals.backupNodes.length < floGlobals.supernodeConfig.backupDepth) {
                 //when less supernodes available, just connect to the revived node
-                let nxtNodes = floSupernode.kBucket.nextNode(myFloID, floSupernode.kBucket.supernodeKBucket
+                let nxtNodes = floSupernode.kBucket.nextNode(myFloID, floSupernode.kBucket.SNKB
                     .toArray().length)
                 var index = floGlobals.backupNodes.length
                 for (let i in floGlobals.backupNodes) {
@@ -9419,7 +9397,7 @@ Bitcoin.Util = {
                 }
             } else {
                 //connect to the revived node as backup if needed
-                let nxtNodes = floSupernode.kBucket.nextNode(myFloID, floSupernode.kBucket.supernodeKBucket
+                let nxtNodes = floSupernode.kBucket.nextNode(myFloID, floSupernode.kBucket.SNKB
                     .toArray()
                     .length)
                 var index = false
@@ -9431,7 +9409,6 @@ Bitcoin.Util = {
                         break;
                     }
                 }
-                console.info(index)
                 if (index !== false) {
                     initateBackupWebsocket(snID).then(result => {
                         floGlobals.backupNodes.splice(index, 0,
@@ -9595,6 +9572,7 @@ Bitcoin.Util = {
                                     sn_msg: {
                                         type: "backupData",
                                         snID: toID,
+                                        time: Data.now(),
                                         key: k,
                                         value: result[k]
                                     }
@@ -9657,6 +9635,7 @@ Bitcoin.Util = {
                                     sn_msg: {
                                         type: "backupData",
                                         snID: prev,
+                                        time: Data.now(),
                                         key: k,
                                         value: result[k]
                                     }

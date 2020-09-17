@@ -3914,6 +3914,8 @@ struct mg_mgr {
  * Mongoose connection.
  */
 struct mg_connection {
+  char gid[35], uid[6];   /* identifiers for groupcast and unicast*/
+
   struct mg_connection *next, *prev; /* mg_mgr::active_connections linkage */
   struct mg_connection *listener;    /* Set only for accept()-ed connections */
   struct mg_mgr *mgr;                /* Pointer to containing manager */

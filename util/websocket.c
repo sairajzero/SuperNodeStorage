@@ -43,7 +43,7 @@ static void sys_broadcast(struct mg_connection *nc, const struct mg_str msg) {
 
 //Broadcast incoming message [sn_c => all]
 static void broadcast(const struct mg_str msg) {
-  printf("\nBROADCAST\t[%d]", (int)msg.len-1);
+  printf("BROADCAST\t[%d]\n", (int)msg.len-1);
   struct mg_connection *c;
   for (c = mg_next(sn_c->mgr, NULL); c != NULL; c = mg_next(sn_c->mgr, c)) {
     if (c == sn_c) continue;
@@ -55,7 +55,7 @@ static void broadcast(const struct mg_str msg) {
 static void groupcast(const struct mg_str msg) {
   char gid[35];
   snprintf(gid, sizeof(gid), "%.*s", 34, &msg.p[1]);
-  printf("\nGROUPCAST\t[%d]", (int)msg.len - 36);
+  printf("GROUPCAST\t[%d]\n", (int)msg.len - 36);
   struct mg_connection *c;
   for (c = mg_next(sn_c->mgr, NULL); c != NULL; c = mg_next(sn_c->mgr, c)) {
     if (c == sn_c) continue; 
@@ -69,7 +69,7 @@ static void unicast(const struct mg_str msg) {
   char uid[6], gid[35];
   snprintf(uid, sizeof(uid), "%.*s", 5, &msg.p[1]);
   snprintf(gid, sizeof(gid), "%.*s", 34, &msg.p[7]);
-  printf("\nUNICAST\t[%d]", (int)msg.len - 42);
+  printf("UNICAST\t\t[%d]\n", (int)msg.len - 42);
   struct mg_connection *c;
   for (c = mg_next(sn_c->mgr, NULL); c != NULL; c = mg_next(sn_c->mgr, c)) {
     if (c == sn_c) continue; 
@@ -80,11 +80,11 @@ static void unicast(const struct mg_str msg) {
 
 //Forward incoming message [user => sn_c]
 static void forward(const struct mg_str msg) {
-  printf("\nFORWARD\t[%d]", (int)msg.len - 41);
+  printf("FORWARD\t\t[%d]\n", (int)msg.len - 41);
   if(sn_c != NULL)
     mg_send_websocket_frame(sn_c, WEBSOCKET_OP_TEXT, msg.p, (int)msg.len);
   else
-    printf("\nWARNING: No supernode connected");
+    printf("WARNING: No supernode connected\n");
 }
 
 static void ev_handler(struct mg_connection *nc, int ev, void *ev_data) {

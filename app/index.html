@@ -8064,6 +8064,8 @@ Bitcoin.Util = {
                         processRequestFromUser(gid, uid, data);
                     else if (data.message)
                         processDataFromUser(gid, uid, data);
+                    else if (data.mark)
+                        processMarkFromUser(gid, uid, data);
                     else if (data.delete)
                         processDeleteFromUser(gid, uid, data);
                     else
@@ -8134,7 +8136,8 @@ Bitcoin.Util = {
             sign: data.sign,
             application: data.application,
             type: data.type,
-            comment: data.comment
+            comment: data.comment,
+            marked: false
         }
         compactIDB.addData(value.application in floGlobals.appList ? value.application :
             floGlobals.defaultDisk, value, key, `SN_${closeNode}`).then(result => {
@@ -8146,6 +8149,42 @@ Bitcoin.Util = {
         })
     }
 
+    function processMarkFromUser(gid, uid, data) {
+        if (!floCrypto.validateAddr(data.receiverID))
+            throw Error("Invalid requestorID")
+        if (!(data.application in floGlobals.appList))
+            throw Error("Invalid application")
+        if (!floCrypto.validateAddr(data.requestorID) ||
+            !floGlobals.appSubAdmins.includes(data.requestorID))
+            throw Error("Invalid requestorID")
+        let closeNode = floSupernode.kBucket.closestNode(data.receiverID)
+        if (!floGlobals.serveList.includes(closeNode))
+            throw Error("Incorrect Supernode")
+        if (data.requestorID !== floCrypto.getFloID(data.pubKey))
+            throw Error("Invalid pubKey")
+        let hashcontent = ["time", "application"]
+            .map(d => data[d]).join("|") + JSON.stringify(data.mark)
+        if (!floCrypto.verifySign(hashcontent, data.sign, data.pubKey))
+            throw Error("Invalid signature")
+        let disk = data.application
+        const markData = (vc, m) => new Promise((res, rej) => {
+            compactIDB.readData(disk, vc, `SN_${closeNode}`).then(d => {
+                d.marked = m;
+                compactIDB.writeData(disk, d, vc, `SN_${closeNode}`)
+                    .then(r => res(vc))
+                    .catch(e => rej(vc))
+            }).catch(e => rej(vc))
+        })
+        Promise.allSettled(Object.keys(data.mark).map(vc => markData(vc, data.mark[vc])))
+            .then(results => {
+                floSupernode.supernodeClientWS.send(`@${uid}#${gid}:${JSON.stringify(results)}`)
+                let mark = {}
+                results.filter(r => r.status === 'fulfilled')
+                    .forEach(r => mark[r.value] = data.mark[r.value])
+                sendBackupMark(data.application, mark, closeNode);
+            })
+    }
+
     function processDeleteFromUser(gid, uid, data) {
         if (!floCrypto.validateAddr(data.requestorID))
             throw Error("Invalid requestorID")
@@ -8153,12 +8192,13 @@ Bitcoin.Util = {
         if (!floGlobals.serveList.includes(closeNode))
             throw Error("Incorrect Supernode")
         if (data.requestorID !== floCrypto.getFloID(data.pubKey))
-            throw Error("Invalid senderID/pubKey")
+            throw Error("Invalid pubKey")
         let hashcontent = ["time", "application", "delete"]
             .map(d => data[d]).join("|")
-        throw Error("Invalid signature")
+        if (!floCrypto.verifySign(hashcontent, data.sign, data.pubKey))
+            throw Error("Invalid signature")
         let disk = data.application in floGlobals.appList ? data.application : floGlobals.defaultDisk;
-        const deleteData = v => new Promise((res, rej) => {
+        const deleteData = vc => new Promise((res, rej) => {
             compactIDB.readData(disk, vc, `SN_${closeNode}`).then(result => {
                 if (result.receiverID === data.requestorID)
                     compactIDB.removeData(disk, vc, `SN_${closeNode}`)
@@ -8168,13 +8208,12 @@ Bitcoin.Util = {
             }).catch(e => rej(vc))
         })
         Promise.allSettled(data.delete.map(vc => deleteData(vc))).then(results => {
-            floSupernode.supernodeClientWS.send(`@${uid}#${gid}:${JSON.stringify(result)}`)
+            floSupernode.supernodeClientWS.send(`@${uid}#${gid}:${JSON.stringify(results)}`)
             let vectorClocks = results
                 .filter(r => r.status === 'fulfilled')
                 .map(r => r.value)
             sendBackupDelete(data.application, vectorClocks, closeNode);
         })
-
     }
 </script>
 <script id="compactIDB">
@@ -8571,7 +8610,7 @@ Bitcoin.Util = {
             var indexesList = [
                 "senderID", "receiverID", "application",
                 "type", "message", "time", "comment",
-                "pubKey", "sign"
+                "pubKey", "sign", "marked"
             ];
             let obsList = Object.keys(floGlobals.appList).concat(floGlobals.defaultDisk)
             var idbObj = {}
@@ -8614,9 +8653,9 @@ Bitcoin.Util = {
             var promises = []
             //For authorised-apps data
             for (let app in floGlobals.appList) {
-                const patternEval = (k, v) => (floGlobals.appList[app] != v.receiverID ||
+                const patternEval = (k, v) => (!v.marked && (floGlobals.appList[app] != v.receiverID ||
                     (!floGlobals.appSubAdmins[app].includes(v.senderID) &&
-                        floGlobals.appList[app] != v.senderID))
+                        floGlobals.appList[app] != v.senderID)))
                 for (let sn of floGlobals.storedList)
                     promises.push(filterDelete(app, `SN_${sn}`, {
                         upperKey,
@@ -8941,6 +8980,9 @@ Bitcoin.Util = {
                 case "backupDelete":
                     deleteBackupData(data.sn_msg)
                     break;
+                case "backupMark":
+                    markBackupData(data.sn_msg)
+                    break;
                 case "supernodeUp":
                     nodeBackOnline(data.from)
                     break;
@@ -8960,7 +9002,7 @@ Bitcoin.Util = {
                     initiateRefresh()
                     break;
                 case "dataRequest":
-                    sendStoredData(data.sn_msg.snID, data.from, data.sn_msg.lowerKey)
+                    sendStoredData(data.sn_msg.snID, data.from)
                     break;
                 case "dataSync":
                     dataSyncIndication(data.sn_msg.snID, data.sn_msg.mode, data.from)
@@ -9034,12 +9076,20 @@ Bitcoin.Util = {
         sendToBackupNodes(sn_msg);
     }
 
-    function sendStoredData(snID, receiver, lowerKey) {
-        if (typeof lowerKey != "object") lowerKey = {};
+    function sendBackupMark(application, mark, snID) {
+        var sn_msg = {
+            type: "backupMark",
+            snID: snID,
+            time: Date.now(),
+            application: application,
+            mark: mark
+        }
+        sendToBackupNodes(sn_msg);
+    }
+
+    function sendStoredData(snID, receiver) {
         const sendObs = (obs, node) => new Promise((res, rej) => {
-            compactIDB.searchData(obs, {
-                lowerKey: lowerKey[obs]
-            }, `SN_${snID}`).then(result => {
+            compactIDB.readAllData(obs, `SN_${snID}`).then(result => {
                 for (let k in result) {
                     var data = {
                         from: myFloID,
@@ -9090,22 +9140,15 @@ Bitcoin.Util = {
     function requestBackupData(from, snID) {
         var promises = []
         let obsList = Object.keys(floGlobals.appList).concat(floGlobals.defaultDisk)
-        for (let i in obsList)
-            promises[i] = compactIDB.searchData(obsList[i], {
-                lastOnly: true
-            }, `SN_${snID}`)
-        Promise.all(promises).then(results => {
-            var lowerKey = {}
-            for (let i in results)
-                lowerKey[obsList[i]] = Object.keys(results[i]).sort().pop() + 1
-            var sn_msg = {
-                type: "dataRequest",
-                snID: snID,
-                lowerKey: lowerKey,
-                time: Date.now()
-            }
-            sendToSupernode(from, sn_msg, true)
-        })
+        Promise.all(obsList.map(o => compactIDB.clearData(o, `SN_${snID}`)))
+            .then(result => {
+                var sn_msg = {
+                    type: "dataRequest",
+                    snID: snID,
+                    time: Date.now()
+                }
+                sendToSupernode(from, sn_msg, true)
+            })
     }
 
     function storeBackupData(data) {
@@ -9133,6 +9176,18 @@ Bitcoin.Util = {
         if (floGlobals.storedList.includes(data.snID)) {
             let disk = data.application in floGlobals.appList ? data.application : floGlobals.defaultDisk;
             data.vectorClocks.forEach(vc => compactIDB.removeData(disk, vc, `SN_${data.snID}`))
+        }
+    }
+
+    function markBackupData(data) {
+        if (floGlobals.storedList.includes(data.snID)) {
+            const markData = (vc, m) =>
+                compactIDB.readData(data.application, vc, `SN_${data.snID}`)
+                .then(d => {
+                    d.marked = m;
+                    compactIDB.writeData(data.application, d, vc, `SN_${data.snID}`)
+                })
+            Object.keys(data.mark).forEach(vc => markData(vc, data.mark[vc]));
         }
     }
 

@@ -25,7 +25,7 @@
       FLO: ['https://explorer.mediciland.com/', 'https://livenet.flocha.in/', 'https://flosight.duckdns.org/', 'http://livenet-explorer.floexperiments.com'],
       FLO_TEST: ['https://testnet-flosight.duckdns.org', 'https://testnet.flocha.in/']
     },
-    SNStorageID: "FR876VRTna3DremwQKZ421xPGMTREzctRB",
+    SNStorageID: "FNaN9McoBAEFUjkRmNQRYLmBF8SpS7Tgfk",
     //sendAmt: 0.001,
     //fee: 0.0005,
 
@@ -8072,7 +8072,6 @@ Bitcoin.Util = {
                         throw Error("Invalid Data-format")
                 } catch (error) {
                     console.error(error)
-                    debugger;
                     if (floGlobals.supernodeConfig.errorFeedback)
                         floSupernode.supernodeClientWS.send(`@${uid}#${gid}:${error.toString()}`)
                 }
@@ -9377,7 +9376,7 @@ Bitcoin.Util = {
                     .then(result => console.log(result))
                     .catch(error => console.error(error))
                     .finally(async _ => {
-                        debugger; //await sleep(300000);
+                        await sleep(300000);
                         recalcClosestNode().then(result => {
                             delNodes.filter(x => floGlobals.serveList.includes(x))
                                 .forEach(sn => {

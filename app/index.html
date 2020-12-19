@@ -8064,6 +8064,8 @@ Bitcoin.Util = {
                         processRequestFromUser(gid, uid, data);
                     else if (data.message)
                         processDataFromUser(gid, uid, data);
+                    else if (data.edit)
+                        processEditFromUser(gid, uid, data);
                     else if (data.mark)
                         processMarkFromUser(gid, uid, data);
                     else if (data.delete)
@@ -8081,7 +8083,6 @@ Bitcoin.Util = {
         }
     }
 
-    //Process request from users
     function processRequestFromUser(gid, uid, data) {
         let request = data.request;
         if (!floCrypto.validateAddr(request.receiverID))
@@ -8110,7 +8111,6 @@ Bitcoin.Util = {
             })
     }
 
-    //Process data from users
     function processDataFromUser(gid, uid, data) {
         if (!floCrypto.validateAddr(data.receiverID))
             throw Error("Invalid receiverID")
@@ -8148,9 +8148,43 @@ Bitcoin.Util = {
         })
     }
 
+    function processEditFromUser(gid, uid, data) {
+        if (!floCrypto.validateAddr(data.receiverID))
+            throw Error("Invalid receiverID")
+        if (!floCrypto.validateAddr(data.requestorID))
+            throw Error("Invalid requestorID")
+        let closeNode = floSupernode.kBucket.closestNode(data.receiverID)
+        if (!floGlobals.serveList.includes(closeNode))
+            throw Error("Incorrect Supernode")
+        let disk = data.application in floGlobals.appList ? data.application : floGlobals.defaultDisk;
+        compactIDB.readData(disk, data.edit.vectorClock, `SN_${closeNode}`).then(d => {
+            try {
+                if (!d.comment.startsWith("EDIT:"))
+                    throw ("Data immutable");
+                else if (d.senderID !== data.requestorID)
+                    throw ("Invalid requestorID")
+                else {
+                    d.sign = data.edit.sign;
+                    d.comment = data.edit.comment;
+                    d.time = data.edit.time = data.time;
+                    let hashcontent = ["receiverID", "time", "application", "type", "message", "comment"]
+                        .map(x => d[x]).join("|");
+                    if (!floCrypto.verifySign(hashcontent, data.edit.sign, d.pubKey))
+                        throw Error("Invalid signature")
+                    compactIDB.writeData(disk, d, data.edit.vectorClock, `SN_${closeNode}`).then(r => {
+                        floSupernode.supernodeClientWS.send(`@${uid}#${gid}:${JSON.stringify(true)}`)
+                        sendBackupEdit(data.application, data.edit, closeNode)
+                    })
+                }
+            } catch (error) {
+                floSupernode.supernodeClientWS.send(`@${uid}#${gid}:${error.toString()}`)
+            }
+        })
+    }
+
     function processMarkFromUser(gid, uid, data) {
         if (!floCrypto.validateAddr(data.receiverID))
-            throw Error("Invalid requestorID")
+            throw Error("Invalid receiverID")
         if (!(data.application in floGlobals.appList))
             throw Error("Invalid application")
         if (!floCrypto.validateAddr(data.requestorID) ||
@@ -8753,7 +8787,7 @@ Bitcoin.Util = {
                                             console.info(result)
                                             resolve(
                                                 `Updated Supernode Configuration`
-                                                )
+                                            )
                                         }).catch(error => reject(error))
                             }).catch(error => reject(error))
                         }).catch(error => reject(error))
@@ -8982,6 +9016,9 @@ Bitcoin.Util = {
                 case "backupMark":
                     markBackupData(data.sn_msg)
                     break;
+                case "backupEdit":
+                    editBackupData(data.sn_msg)
+                    break;
                 case "supernodeUp":
                     nodeBackOnline(data.from)
                     break;
@@ -9082,6 +9119,17 @@ Bitcoin.Util = {
             time: Date.now(),
             application: application,
             mark: mark
+        }
+        sendToBackupNodes(sn_msg);
+    }
+
+    function sendBackupEdit(application, edit, snID) {
+        var sn_msg = {
+            type: "backupEdit",
+            snID: snID,
+            time: Date.now(),
+            application: application,
+            edit: edit
         }
         sendToBackupNodes(sn_msg);
     }
@@ -9187,6 +9235,18 @@ Bitcoin.Util = {
                     compactIDB.writeData(data.application, d, vc, `SN_${data.snID}`)
                 })
             Object.keys(data.mark).forEach(vc => markData(vc, data.mark[vc]));
+        }
+    }
+
+    function editBackupData(data) {
+        if (floGlobals.storedList.includes(data.snID)) {
+            let disk = data.application in floGlobals.appList ? data.application : floGlobals.defaultDisk;
+            compactIDB.readData(disk, data.edit.vectorClock, `SN_${data.snID}`).then(d => {
+                d.sign = data.edit.sign;
+                d.time = data.edit.time;
+                d.comment = data.edit.comment;
+                compactIDB.writeData(disk, d, data.edit.vectorClock, `SN_${data.snID}`)
+            })
         }
     }
 

@@ -8156,8 +8156,6 @@ Bitcoin.Util = {
         let closeNode = floSupernode.kBucket.closestNode(data.receiverID)
         if (!floGlobals.serveList.includes(closeNode))
             throw Error("Incorrect Supernode")
-        if (data.requestorID !== floCrypto.getFloID(data.pubKey))
-            throw Error("Invalid pubKey")
         let disk = data.application in floGlobals.appList ? data.application : floGlobals.defaultDisk;
         compactIDB.readData(disk, data.edit.vectorClock, `SN_${closeNode}`).then(d => {
             try {
@@ -8171,7 +8169,7 @@ Bitcoin.Util = {
                     d.time = data.edit.time = data.time;
                     let hashcontent = ["receiverID", "time", "application", "type", "message", "comment"]
                         .map(x => d[x]).join("|");
-                    if (!floCrypto.verifySign(hashcontent, data.edit.sign, data.pubKey))
+                    if (!floCrypto.verifySign(hashcontent, data.edit.sign, d.pubKey))
                         throw Error("Invalid signature")
                     compactIDB.writeData(disk, d, data.edit.vectorClock, `SN_${closeNode}`).then(r => {
                         floSupernode.supernodeClientWS.send(`@${uid}#${gid}:${JSON.stringify(true)}`)

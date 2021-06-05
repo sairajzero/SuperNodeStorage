@@ -7399,7 +7399,7 @@ Bitcoin.Util = {
             fetch_retry: function (apicall) {
                 return new Promise((resolve, reject) => {
                     this.serverList.splice(this.curPos, 1);
-                    this.curPos = floCrypto.randInt(0, this.serverList.length)
+                    this.curPos = floCrypto.randInt(0, this.serverList.length - 1)
                     this.fetch_api(apicall)
                         .then(result => resolve(result))
                         .catch(error => reject(error));

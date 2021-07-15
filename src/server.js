@@ -1,5 +1,7 @@
 const http = require('http')
 const WebSocket = require('ws')
+const supernode = require('./supernode')
+const backupProcess = require('./backupProcess')
 const port = 8080;
 const server = http.createServer((req, res) => {
     if (req.method === "GET") {
@@ -38,11 +40,10 @@ const wsServer = new WebSocket.Server({
 });
 wsServer.on('connection', function connection(ws) {
     ws.on('message', message => {
-        var request = JSON.parse(message)
-        if (FROM_SUPERNODE)  //TODO
-            backupProcess.processTaskFromSupernode(request, res => ws.send(res))
+        if (message.startsWith(backupProcess.SUPERNODE_INDICATOR))
+            backupProcess.processTask(message, ws);
         else
-            supernode.processRequestFromUser(request)
+            supernode.processRequestFromUser(JSON.parse(message))
             .then(result => ws.send(JSON.parse(result[0])))
             .catch(error => ws.send(error))
     });

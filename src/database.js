@@ -42,7 +42,7 @@ var mysql = require('mysql');
             });
             conn.connect((err) => {
                 if (err) return reject(err);
-                this.conn = conn;
+                db.conn = conn;
                 resolve("Connected")
             })
         })
@@ -68,14 +68,14 @@ var mysql = require('mysql');
                 T_struct.TAG_KEY + " CHAR(66), " +
                 T_struct.TAG_SIGN + " VARCHAR(160), " +
                 "PRIMARY KEY (" + H_struct.VECTOR_CLOCK + ")";
-            this.conn.query(statement1, (err, res) => err ? reject(err) : resolve(res));
+            db.conn.query(statement1, (err, res) => err ? reject(err) : resolve(res));
         })
     }
 
     db.dropTable = function(snID) {
         return new Promise((resolve, reject) => {
             let statement = "DROP TABLE " + snID;
-            this.conn.query(statement, (err, res) => err ? reject(err) : resolve(res));
+            db.conn.query(statement, (err, res) => err ? reject(err) : resolve(res));
         })
     }
 
@@ -86,21 +86,27 @@ var mysql = require('mysql');
             let statement = "INSERT INTO " + snID +
                 " (" + attr.join(", ") + ", " + L_struct.STATUS + ", " + L_struct.LOG_TIME + ") " +
                 "VALUES (" + attr.map(a => '?').join(", ") + ", 1, " + Date.now() + ")";
-            this.conn.query(statement, values, (err, res) => err ? reject(err) : resolve(data));
+            db.conn.query(statement, values, (err, res) => err ? reject(err) : resolve(data));
         })
     }
 
     db.tagData = function(snID, vectorClock, tag, tagTime, tagKey, tagSign) {
         return new Promise((resolve, reject) => {
+            let data = {
+                [T_struct.TAG]: tag,
+                [T_struct.TAG_TIME]: tagTime,
+                [T_struct.TAG_KEY]: tagKey,
+                [T_struct.TAG_SIGN]: tagSign,
+                [L_struct.LOG_TIME]: Date.now(),
+                [H_struct.VECTOR_CLOCK]: vectorClock
+            }
+            let attr = Object.keys(data);
+            let values = attr.map(a => data[a]);
+            data[H_struct.VECTOR_CLOCK] = vectorClock;  //also add vectorClock to resolve data
             let statement = "UPDATE " + snID +
-                " SET " +
-                T_struct.TAG + "=?, " +
-                T_struct.TAG_TIME + "=?, " +
-                T_struct.TAG_KEY + "=?, " +
-                T_struct.TAG_SIGN + "=? " +
-                L_struct.LOG_TIME + "=?"
-            " WHERE " + H_struct.VECTOR_CLOCK + "=" + vectorClock;
-            this.conn.query(statement, [tag, tagTime, tagKey, tagSign, Date.now()], (err, res) => err ? reject(err) : resolve(res));
+                " SET " + attr.map(a => a + "=?").join(", ") +
+                " WHERE " + H_struct.VECTOR_CLOCK + "=" + vectorClock;
+            db.conn.query(statement, values, (err, res) => err ? reject(err) : resolve(data));
         })
     }
 
@@ -134,7 +140,25 @@ var mysql = require('mysql');
                 " FROM " + snID +
                 " WHERE " + conditionArr.join(" AND ") +
                 request.mostRecent ? "LIMIT 1" : (" ORDER BY " + H_struct.VECTOR_CLOCK);
-            this.conn.query(statement, (err, res) => err ? reject(err) : resolve(res));
+            db.conn.query(statement, (err, res) => err ? reject(err) : resolve(res));
+        })
+    }
+
+    db.lastLogTime = function(snID) {
+        return new Promise((resolve, reject) => {
+            let statement = "SELECT MAX(" + L_struct.LOG_TIME + ") FROM " + snID;
+            db.conn.query(statement, (err, res) => err ? reject(err) : resolve(res))
+        })
+    }
+
+    db.createGetLastLog = function(snID) {
+        return new Promise((resolve, reject) => {
+            db.createTable(snID).then(result => {}).catch(error => {})
+                .finally(_ => {
+                    db.lastLogTime(snID)
+                        .then(result => resolve(result))
+                        .catch(error => reject(error))
+                })
         })
     }
 
@@ -143,7 +167,7 @@ var mysql = require('mysql');
             let statement = "SELECT * FROM " + snID +
                 " WHERE " + L_struct.LOG_TIME + ">=" + logtime +
                 " ORDER BY " + L_struct.LOG_TIME;
-            this.conn.query(statement, (err, res) => err ? reject(err) : resolve(res))
+            db.conn.query(statement, (err, res) => err ? reject(err) : resolve(res))
         })
     }
 
@@ -157,7 +181,18 @@ var mysql = require('mysql');
                 " (" + attr.join(", ") + ", " + L_struct.STATUS + ", " + L_struct.LOG_TIME + ") " +
                 "VALUES (" + attr.map(a => '?').join(", ") + ", 1, " + Date.now() + ") " +
                 "ON DUPLICATE KEY UPDATE " + u_attr.map(a => a + "=?").join(", ");
-                this.conn.query(statement, values.concat(u_values), (err, res) => err ? reject(err) : resolve(res));
+            db.conn.query(statement, values.concat(u_values), (err, res) => err ? reject(err) : resolve(res));
+        })
+    }
+
+    db.storeTag = function(snID, data) {
+        return new Promise((resolve, reject) => {
+            let attr = Object.keys(T_struct).map(a => T_struct[a]).concat(L_struct.LOG_TIME);
+            let values = attr.map(a => data[a]);
+            let statement = "UPDATE " + snID +
+                " SET " + attr.map(a => a + "=?").join(", ") +
+                " WHERE " + H_struct.VECTOR_CLOCK + "=" + data[H_struct.VECTOR_CLOCK];
+            db.conn.query(statement, values, (err, res) => err ? reject(err) : resolve(data));
         })
     }
 })()

@@ -1,6 +1,32 @@
 'use strict';
 var mysql = require('mysql');
 
+const Base_Tables = {
+    LastTxs: {
+        K: "CHAR(34) NOT NULL",
+        N: "INT NOT NULL",
+        PRIMARY: "KEY (K)"
+    },
+    Configs: {
+        K: "VARCHAR(64) NOT NULL",
+        V: "VARCHAR(512) NOT NULL",
+        PRIMARY: "KEY (K)"
+    },
+    SuperNodes: {
+        FLO_ID: "CHAR(34) NOT NULL",
+        PUB_KEY: "CHAR(66) NOT NULL",
+        URI: "VARCHAR(256) NOT NULL",
+        PRIMARY: "KEY (FLO_ID)"
+    },
+    Applications: {
+        APP_NAME: "VARCHAR(64) NOT NULL",
+        ADMIN_ID: "CHAR(34) NOT NULL",
+        SUB_ADMINS: "VARCHAR(MAX) NOT NULL",
+        PRIMARY: "KEY (APP_NAME)"
+    }
+}
+
+
 const H_struct = {
     VECTOR_CLOCK: "vectorClock",
     SENDER_ID: "senderID",
@@ -32,9 +58,22 @@ const T_struct = {
 function Database(user, password, dbname, host = 'localhost') {
     const db = {};
 
+    db.createBase = function() {
+        return new Promise((resolve, reject) => {
+            let statements = []
+            for (t in Base_Tables)
+                statements.push("CREATE TABLE IF NOT EXISTS " + t + "( " +
+                    Object.keys(Base_Tables[t]).map(a => a + " " + Base_Tables[t][a]).join(", ") + " )");
+            let query = s => new Promise((res, rej) => db.conn.query(s, (e, r) => e ? res(e) : rej(r)));
+            Promise.all(statements.forEach(s => query(s)))
+                .then(result => resolve(result))
+                .catch(error => reject(error))
+        })
+    }
+
     db.createTable = function(snID) {
         return new Promise((resolve, reject) => {
-            let statement1 = "CREATE TABLE " + snID + " (" +
+            let statement = "CREATE TABLE IF NOT EXISTS " + snID + " ( " +
                 H_struct.VECTOR_CLOCK + " VARCHAR(50) NOT NULL, " +
                 H_struct.SENDER_ID + " CHAR(34) NOT NULL, " +
                 H_struct.RECEIVER_ID + " CHAR(34) NOT NULL, " +
@@ -51,8 +90,9 @@ function Database(user, password, dbname, host = 'localhost') {
                 T_struct.TAG_TIME + " INT, " +
                 T_struct.TAG_KEY + " CHAR(66), " +
                 T_struct.TAG_SIGN + " VARCHAR(160), " +
-                "PRIMARY KEY (" + H_struct.VECTOR_CLOCK + ")";
-            db.conn.query(statement1, (err, res) => err ? reject(err) : resolve(res));
+                "PRIMARY KEY (" + H_struct.VECTOR_CLOCK + ")" +
+                " )";
+            db.conn.query(statement, (err, res) => err ? reject(err) : resolve(res));
         })
     }
 
@@ -70,6 +110,9 @@ function Database(user, password, dbname, host = 'localhost') {
             let statement = "INSERT INTO " + snID +
                 " (" + attr.join(", ") + ", " + L_struct.STATUS + ", " + L_struct.LOG_TIME + ") " +
                 "VALUES (" + attr.map(a => '?').join(", ") + ", 1, " + Date.now() + ")";
+            data = Object.fromEntries(attr.map((a, i) => [
+                [a, values[i]]
+            ]));
             db.conn.query(statement, values, (err, res) => err ? reject(err) : resolve(data));
         })
     }
@@ -86,7 +129,7 @@ function Database(user, password, dbname, host = 'localhost') {
             }
             let attr = Object.keys(data);
             let values = attr.map(a => data[a]);
-            data[H_struct.VECTOR_CLOCK] = vectorClock;  //also add vectorClock to resolve data
+            data[H_struct.VECTOR_CLOCK] = vectorClock; //also add vectorClock to resolve data
             let statement = "UPDATE " + snID +
                 " SET " + attr.map(a => a + "=?").join(", ") +
                 " WHERE " + H_struct.VECTOR_CLOCK + "=" + vectorClock;
@@ -119,7 +162,7 @@ function Database(user, password, dbname, host = 'localhost') {
                 else
                     conditionArr.push(`${H_struct.SENDER_ID} = '${request.senderID}'`)
             }
-            console.log(conditionArr);
+            //console.log(conditionArr);
             let statement = "SELECT (" + Object.keys(H_struct).join(", ") + ")" +
                 " FROM " + snID +
                 " WHERE " + conditionArr.join(" AND ") +
@@ -137,12 +180,11 @@ function Database(user, password, dbname, host = 'localhost') {
 
     db.createGetLastLog = function(snID) {
         return new Promise((resolve, reject) => {
-            db.createTable(snID).then(result => {}).catch(error => {})
-                .finally(_ => {
-                    db.lastLogTime(snID)
-                        .then(result => resolve(result))
-                        .catch(error => reject(error))
-                })
+            db.createTable(snID).then(result => {
+                db.lastLogTime(snID)
+                    .then(result => resolve(result))
+                    .catch(error => reject(error))
+            }).catch(error => reject(error))
         })
     }
 

@@ -3,6 +3,7 @@ const WebSocket = require('ws')
 const supernode = require('./supernode')
 const backupProcess = require('./backupProcess')
 const port = 8080;
+
 const server = http.createServer((req, res) => {
     if (req.method === "GET") {
         //GET request (requesting data)
@@ -24,10 +25,12 @@ const server = http.createServer((req, res) => {
             //process the data storing
             supernode.processIncomingData(data).then(result => {
                 res.end(result[0]);
-                if (result[1])
-                    relayToBackupNodes(result[1]) //TODO
+                if (result[1]) {
+                    if (result[1] === 'DATA')
+                        sendToLiveRequests(result[0])
+                    backupProcess.forwardToNextNode(result[1], result[0])
+                }
             }).catch(error => res.end(error))
-
         })
     }
 });
@@ -39,13 +42,24 @@ const wsServer = new WebSocket.Server({
     server
 });
 wsServer.on('connection', function connection(ws) {
-    ws.onmessage = function(evt){
+    ws.onmessage = function(evt) {
         let message = evt.data;
         if (message.startsWith(backupProcess.SUPERNODE_INDICATOR))
             backupProcess.processTaskFromSupernode(message, ws);
-        else
-            supernode.processRequestFromUser(JSON.parse(message))
-            .then(result => ws.send(JSON.parse(result[0])))
-            .catch(error => ws.send(error))
+        else {
+            var request = JSON.parse(message);
+            supernode.processRequestFromUser(JSON.parse(message)) //TODO: set live request
+                .then(result => {
+                    ws.send(JSON.parse(result[0]))
+                    ws._liveReq = request;
+                }).catch(error => ws.send(error))
+        }
     }
 });
+
+function sendToLiveRequests(data) {
+    wsServer.clients.forEach(ws => {
+        if (supernode.checkIfRequestSatisfy(ws._liveReq, data)) //TODO
+            ws.send(data)
+    })
+}

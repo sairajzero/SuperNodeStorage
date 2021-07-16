@@ -405,11 +405,13 @@ function sendStoredData(lastlogs, node) {
                     id: n,
                     status: true
                 }))
+                console.info(`START: ${snID} data sync(send) to ${node.id}`)
                 //TODO: efficiently handle large number of data instead of loading all into memory
                 result.forEach(d => node.send(packet_.constuct({
                     type: STORE_BACKUP_DATA,
                     data: d
                 })))
+                console.info(`END: ${snID} data sync(send) to ${node.id}`)
                 node.send(packet_.constuct({
                     type: DATA_SYNC,
                     id: n,
@@ -420,6 +422,7 @@ function sendStoredData(lastlogs, node) {
     }
 }
 
+//Indicate sync of data
 function dataSyncIndication(snID, status, from) {
     console.info(`${status ? 'START':'END'}: ${snID} data sync(receive) form ${from}`);
 }
@@ -427,20 +430,47 @@ function dataSyncIndication(snID, status, from) {
 //Store (backup) data
 function storeBackupData(data) {
     let closestNode = kBucket.closestNode(data.receiverID);
-    if (_list.stored.includes(closestNode))
+    if (_list.stored.includes(closestNode)) {
         db.storeData(closestNode, data);
-}
-//tag (backup) data
-function tagBackupData(data) {
-    let closestNode = kBucket.closestNode(data.receiverID);
-    if (_list.stored.includes(closestNode))
-        db.storeTag(closestNode, data);
+        if (_list[closestNode] < backupDepth)
+            _nextNode.send(packet_.constuct({
+                type: STORE_BACKUP_DATA,
+                data: data
+            }));
+    }
+
 }
 
+//Tag (backup) data
+function tagBackupData(data) {
+    let closestNode = kBucket.closestNode(data.receiverID);
+    if (_list.stored.includes(closestNode)) {
+        db.storeTag(closestNode, data);
+        if (_list[closestNode] < backupDepth)
+            _nextNode.send(packet_.constuct({
+                type: TAG_BACKUP_DATA,
+                data: data
+            }));
+    }
+}
+
+//Forward incoming to next node
+function forwardToNextNode(mode, data) {
+    var modeMap = {
+        'TAG': TAG_BACKUP_DATA,
+        'DATA': STORE_BACKUP_DATA
+    }
+    if(mode in modeMap)
+    _nextNode.send(packet_.constuct({
+        type: modeMap[mode],
+        data: data
+    }));
+}
 
 //-----EXPORTS-----
 module.exports = {
     processTaskFromSupernode,
     setBlockchainParameters,
+    forwardToNextNode,
     SUPERNODE_INDICATOR
 }

@@ -1,4 +1,7 @@
-const db = require("./database")
+var db;
+function setParameters(db){
+    db = db
+}
 
 function processIncomingData(data) {
     return new Promise((resolve, reject) => {
@@ -13,14 +16,14 @@ function processIncomingData(data) {
             return reject("Invalid Time");
         else {
             let process;
-            if (data.request)
-                process = processRequestFromUser(gid, uid, data);
-            else if (data.message)
-                process = processDataFromUser(gid, uid, data);
+            if (data.request) //Request
+                process = processRequestFromUser(data.request);
+            else if (data.message) //Store data
+                process = processDataFromUser(data);
             //else if (data.edit)
             //    return processEditFromUser(gid, uid, data);
-            else if (data.mark)
-                process = processMarkFromUser(gid, uid, data);
+            else if (data) //Tag data
+                process = processTagFromUser(gid, uid, data);
             //else if (data.delete)
             //    return processDeleteFromUser(gid, uid, data);
             else
@@ -64,7 +67,7 @@ function processDataFromUser(data) {
                 comment: data.comment,
                 sign: data.sign,
                 pubKey: data.pubKey
-            }).then(result => resolve(result))
+            }).then(result => resolve([result, 'DATA']))
             .catch(error => reject(error))
     })
 }
@@ -76,9 +79,63 @@ function processRequestFromUser(request) {
         let closeNode = floSupernode.kBucket.closestNode(request.receiverID)
         if (!floGlobals.serveList.includes(closeNode))
             return reject("Incorrect Supernode");
-
         db.searchData(closeNode, request)
-            .then(result => resolve(result))
+            .then(result => resolve([result]))
             .catch(error => reject(error))
     })
+}
+
+function processTagFromUser(data) {
+    return new Promise((resolve, reject) => {
+        if (!floCrypto.validateAddr(data.receiverID))
+            return reject("Invalid receiverID")
+        if (!(data.application in floGlobals.appList))
+            return reject("Invalid application")
+        if (!floCrypto.validateAddr(data.requestorID) ||
+            !floGlobals.appSubAdmins.includes(data.requestorID))
+            return reject("Invalid requestorID")
+        if (data.requestorID !== floCrypto.getFloID(data.pubKey))
+            return reject("Invalid pubKey")
+        let closeNode = floSupernode.kBucket.closestNode(data.receiverID)
+        if (!floGlobals.serveList.includes(closeNode))
+            return reject("Incorrect Supernode")
+        let hashcontent = ["time", "application", "tag"]
+            .map(d => data[d]).join("|");
+        if (!floCrypto.verifySign(hashcontent, data.sign, data.pubKey))
+            return reject("Invalid signature");
+        db.tagData(closeNode, data.vectorClock, data.tag, data.time, data.pubKey, data.sign)
+            .then(result => resolve([result, 'TAG']))
+            .catch(error => reject(error))
+    })
+}
+
+function checkIfRequestSatisfy(request, data) {
+    if (!request || request.mostRecent || request.receiverID !== data.receiverID)
+        return false;
+    if (request.atKey && request.atKey !== data.vectorClock)
+        return false;
+    if (request.lowerVectorClock && request.lowerVectorClock > data.vectorClock)
+        return false;
+    if (request.upperVectorClock && request.upperVectorClock < data.vectorClock)
+        return false;
+    if (request.application !== data.application)
+        return false;
+    if (request.comment && request.comment !== data.comment)
+        return false;
+    if (request.type && request.type !== data.type)
+        return false;
+    if (request.senderID) {
+        if (Array.isArray(request.senderID) && !request.senderID.includes(data.senderID))
+            return false;
+        else if (request.senderID !== data.senderID)
+            return false;
+    }
+    return true;
+}
+
+module.exports = {
+    setParameters,
+    checkIfRequestSatisfy,
+    processRequestFromUser,
+    processIncomingData
 }

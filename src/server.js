@@ -39,12 +39,13 @@ const wsServer = new WebSocket.Server({
     server
 });
 wsServer.on('connection', function connection(ws) {
-    ws.on('message', message => {
+    ws.onmessage = function(evt){
+        let message = evt.data;
         if (message.startsWith(backupProcess.SUPERNODE_INDICATOR))
-            backupProcess.processTask(message, ws);
+            backupProcess.processTaskFromSupernode(message, ws);
         else
             supernode.processRequestFromUser(JSON.parse(message))
             .then(result => ws.send(JSON.parse(result[0])))
             .catch(error => ws.send(error))
-    });
+    }
 });

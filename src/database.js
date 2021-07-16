@@ -1,52 +1,36 @@
 'use strict';
 var mysql = require('mysql');
 
-(function() {
-    var db = module.exports = {}
+const H_struct = {
+    VECTOR_CLOCK: "vectorClock",
+    SENDER_ID: "senderID",
+    RECEIVER_ID: "receiverID",
+    TYPE: "type",
+    APPLICATION: "application"
+}
 
-    const H_struct = {
-        VECTOR_CLOCK: "vectorClock",
-        SENDER_ID: "senderID",
-        RECEIVER_ID: "receiverID",
-        TYPE: "type",
-        APPLICATION: "application"
-    }
+const B_struct = {
+    TIME: "time",
+    MESSAGE: "message",
+    SIGNATURE: "sign",
+    PUB_KEY: "pubKey",
+    COMMENT: "comment"
+}
 
-    const B_struct = {
-        TIME: "time",
-        MESSAGE: "message",
-        SIGNATURE: "sign",
-        PUB_KEY: "pubKey",
-        COMMENT: "comment"
-    }
+const L_struct = {
+    STATUS: "status_n",
+    LOG_TIME: "log_time"
+}
 
-    const L_struct = {
-        STATUS: "status_n",
-        LOG_TIME: "log_time"
-    }
+const T_struct = {
+    TAG: "tag",
+    TAG_TIME: "tag_time",
+    TAG_KEY: "tag_key",
+    TAG_SIGN: "tag_sign"
+}
 
-    const T_struct = {
-        TAG: "tag",
-        TAG_TIME: "tag_time",
-        TAG_KEY: "tag_key",
-        TAG_SIGN: "tag_sign"
-    }
-
-    db.connect = function(user, password, db, host = 'localhost') {
-        return new Promise((resolve, reject) => {
-            let conn = mysql.createConnection({
-                host: host,
-                user: user,
-                password: password,
-                database: db
-            });
-            conn.connect((err) => {
-                if (err) return reject(err);
-                db.conn = conn;
-                resolve("Connected")
-            })
-        })
-    }
+function Database(user, password, dbname, host = 'localhost') {
+    const db = {};
 
     db.createTable = function(snID) {
         return new Promise((resolve, reject) => {
@@ -195,4 +179,24 @@ var mysql = require('mysql');
             db.conn.query(statement, values, (err, res) => err ? reject(err) : resolve(data));
         })
     }
-})()
+
+    db.close = function() {
+        db.conn.end();
+    }
+
+    return new Promise((resolve, reject) => {
+        let conn = mysql.createConnection({
+            host: host,
+            user: user,
+            password: password,
+            database: dbname
+        });
+        conn.connect((err) => {
+            if (err) return reject(err);
+            db.conn = conn;
+            resolve(db)
+        });
+    })
+}
+
+module.exports = Database;

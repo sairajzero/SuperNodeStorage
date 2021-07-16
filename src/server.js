@@ -48,7 +48,7 @@ wsServer.on('connection', function connection(ws) {
             backupProcess.processTaskFromSupernode(message, ws);
         else {
             var request = JSON.parse(message);
-            supernode.processRequestFromUser(JSON.parse(message)) //TODO: set live request
+            supernode.processRequestFromUser(JSON.parse(message))
                 .then(result => {
                     ws.send(JSON.parse(result[0]))
                     ws._liveReq = request;
@@ -59,7 +59,7 @@ wsServer.on('connection', function connection(ws) {
 
 function sendToLiveRequests(data) {
     wsServer.clients.forEach(ws => {
-        if (supernode.checkIfRequestSatisfy(ws._liveReq, data)) //TODO
+        if (supernode.checkIfRequestSatisfy(ws._liveReq, data))
             ws.send(data)
     })
 }

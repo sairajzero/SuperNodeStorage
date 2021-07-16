@@ -249,10 +249,10 @@ function processTaskFromPrevNode(packet) {
                     orderBackup(task.order)
                     break;
                 case STORE_BACKUP_DATA:
-                    storeBackupData(task.data)
+                    storeBackupData(task.data, from, packet)
                     break;
                 case TAG_BACKUP_DATA:
-                    tagBackupData(task.data)
+                    tagBackupData(task.data, from, packet)
                     break;
                 case DATA_REQUEST:
                     sendStoredData(task.nodes, _prevNode)
@@ -369,7 +369,15 @@ function reconnectNextNode() {
     _nextNode.close();
     connectToNextNode()
         .then(result => console.log(result))
-        .catch(error => console.error(error))
+        .catch(error => {
+            //Case: No other node is online
+            console.error(error);
+            //Serve all nodes
+            for (let sn in supernodeList)
+                db.createTable(sn)
+                .then(result => _list[sn] = 0)
+                .catch(error => console.error(error))
+        })
 }
 
 //-----BACKUP TASKS-----
@@ -377,11 +385,14 @@ function reconnectNextNode() {
 //Order the stored backup
 function orderBackup(order) {
     let new_order = [];
+    let cur_serve = kBucket.innerNodes(_prevNode.id, myFloID);
     for (let n in order) {
         if (order[n] + 1 !== _list[n]) {
             if (order[n] >= backupDepth)
-                REMOVE_STORING_if_exist(N) //TODO
-            else if (condition) { //TODO: condition to check roll over when less nodes online 
+                db.dropTable(n).then(_ => null)
+                .catch(error => console.error(error))
+                .finally(_ => _list.delete(n))
+            else if (_list[n] !== 0 || !cur_serve.includes(n)) {
                 _list[n] = order[n] + 1;
                 new_order.push(n);
             }
@@ -428,29 +439,22 @@ function dataSyncIndication(snID, status, from) {
 }
 
 //Store (backup) data
-function storeBackupData(data) {
+function storeBackupData(data, from, packet) {
     let closestNode = kBucket.closestNode(data.receiverID);
     if (_list.stored.includes(closestNode)) {
         db.storeData(closestNode, data);
-        if (_list[closestNode] < backupDepth)
-            _nextNode.send(packet_.constuct({
-                type: STORE_BACKUP_DATA,
-                data: data
-            }));
+        if (_list[closestNode] < backupDepth && _nextNode.id !== from)
+            _nextNode.send(packet);
     }
-
 }
 
 //Tag (backup) data
-function tagBackupData(data) {
+function tagBackupData(data, from, packet) {
     let closestNode = kBucket.closestNode(data.receiverID);
     if (_list.stored.includes(closestNode)) {
         db.storeTag(closestNode, data);
-        if (_list[closestNode] < backupDepth)
-            _nextNode.send(packet_.constuct({
-                type: TAG_BACKUP_DATA,
-                data: data
-            }));
+        if (_list[closestNode] < backupDepth && _nextNode.id !== from)
+            _nextNode.send(packet);
     }
 }
 
@@ -460,11 +464,11 @@ function forwardToNextNode(mode, data) {
         'TAG': TAG_BACKUP_DATA,
         'DATA': STORE_BACKUP_DATA
     }
-    if(mode in modeMap)
-    _nextNode.send(packet_.constuct({
-        type: modeMap[mode],
-        data: data
-    }));
+    if (mode in modeMap && _nextNode.id)
+        _nextNode.send(packet_.constuct({
+            type: modeMap[mode],
+            data: data
+        }));
 }
 
 //-----EXPORTS-----

@@ -1,7 +1,4 @@
 'use strict';
-const {
-    stat
-} = require('fs');
 const WebSocket = require('ws');
 
 //CONSTANTS
@@ -24,8 +21,7 @@ const SUPERNODE_INDICATOR = '$',
     BACKUP_HANDSHAKE_INIT = "handshakeInitate",
     BACKUP_HANDSHAKE_END = "handshakeEnd";
 
-//const backupNodes = [];
-var backupDepth, supernodeList, appList, kBucket;
+var DB //container for database
 
 //List of node backups stored
 const _list = {};
@@ -143,21 +139,12 @@ packet_.s = d => [JSON.stringify(d.message), d.time].join("|");
 packet_.parse = function(str) {
     let packet = JSON.parse(str.substring(SUPERNODE_INDICATOR.length))
     let curTime = Date.now();
-    if (packet.time > curTime - delayTime &&
-        floCrypto.verifySign(this.s(packet), packet.sign, supernodeList[packet.from].pubKey)) {
+    if (packet.time > curTime - floGlobals.sn_config.delayDelta &&
+        floCrypto.verifySign(this.s(packet), packet.sign, floGlobals.supernodes[packet.from].pubKey)) {
         if (!Array.isArray(packet.message))
             packet.message = [packet.message];
         return packet;
     }
-}
-
-//Set parameters from blockchain
-function setBlockchainParameters(depth, supernodes, apps, KB, delay) {
-    backupDepth = depth;
-    supernodeList = supernodes;
-    appList = apps;
-    kBucket = KB;
-    delayTime = delay;
 }
 
 //-----NODE CONNECTORS (WEBSOCKET)-----
@@ -165,9 +152,9 @@ function setBlockchainParameters(depth, supernodes, apps, KB, delay) {
 //Connect to Node websocket
 function connectToNode(snID) {
     return new Promise((resolve, reject) => {
-        if (!(snID in supernodeList))
+        if (!(snID in floGlobals.supernodes))
             return reject(`${snID} is not a supernode`)
-        const ws = new WebSocket("wss://" + supernodeList[nextNodeID].uri + "/");
+        const ws = new WebSocket("wss://" + floGlobals.supernodes[nextNodeID].uri + "/");
         ws.on("error", () => reject(`${snID} is offline`));
         ws.on('open', () => resolve(ws));
     })
@@ -176,7 +163,7 @@ function connectToNode(snID) {
 //Connect to Node websocket thats online
 function connectToActiveNode(snID, reverse = false) {
     return new Promise((resolve, reject) => {
-        if (!(snID in supernodeList))
+        if (!(snID in floGlobals.supernodes))
             return reject(`${snID} is not a supernode`)
         if (snID === myFloID)
             return reject(`Reached end of circle. Next node avaiable is self`)
@@ -335,7 +322,7 @@ function handshakeMid(id, ws) {
     });
     if (!req_sync.length && !new_order.length)
         return; //No order change and no need for any data sync
-    Promise.all(req_sync.forEach(n => db.createGetLastLog(n))).then(result => {
+    Promise.all(req_sync.forEach(n => DB.createGetLastLog(n))).then(result => {
         let tasks = [];
         if (req_sync.length) {
             tasks.push({
@@ -373,8 +360,8 @@ function reconnectNextNode() {
             //Case: No other node is online
             console.error(error);
             //Serve all nodes
-            for (let sn in supernodeList)
-                db.createTable(sn)
+            for (let sn in floGlobals.supernodes)
+                DB.createTable(sn)
                 .then(result => _list[sn] = 0)
                 .catch(error => console.error(error))
         })
@@ -388,8 +375,8 @@ function orderBackup(order) {
     let cur_serve = kBucket.innerNodes(_prevNode.id, myFloID);
     for (let n in order) {
         if (order[n] + 1 !== _list[n]) {
-            if (order[n] >= backupDepth)
-                db.dropTable(n).then(_ => null)
+            if (order[n] >= floGlobals.sn_config.backupDepth)
+                DB.dropTable(n).then(_ => null)
                 .catch(error => console.error(error))
                 .finally(_ => _list.delete(n))
             else if (_list[n] !== 0 || !cur_serve.includes(n)) {
@@ -410,7 +397,7 @@ function orderBackup(order) {
 function sendStoredData(lastlogs, node) {
     for (n in lastlogs) {
         if (_list.stored.includes(n)) {
-            db.getData(n, lastlogs[n]).then(result => {
+            DB.getData(n, lastlogs[n]).then(result => {
                 node.send(packet_.constuct({
                     type: DATA_SYNC,
                     id: n,
@@ -442,8 +429,9 @@ function dataSyncIndication(snID, status, from) {
 function storeBackupData(data, from, packet) {
     let closestNode = kBucket.closestNode(data.receiverID);
     if (_list.stored.includes(closestNode)) {
-        db.storeData(closestNode, data);
-        if (_list[closestNode] < backupDepth && _nextNode.id !== from)
+        DB.storeData(closestNode, data);
+        if (_list[closestNode] < floGlobals.sn_config.backupDepth &&
+            _nextNode.id !== from)
             _nextNode.send(packet);
     }
 }
@@ -452,8 +440,9 @@ function storeBackupData(data, from, packet) {
 function tagBackupData(data, from, packet) {
     let closestNode = kBucket.closestNode(data.receiverID);
     if (_list.stored.includes(closestNode)) {
-        db.storeTag(closestNode, data);
-        if (_list[closestNode] < backupDepth && _nextNode.id !== from)
+        DB.storeTag(closestNode, data);
+        if (_list[closestNode] < floGlobals.sn_config.backupDepth &&
+            _nextNode.id !== from)
             _nextNode.send(packet);
     }
 }
@@ -476,5 +465,8 @@ module.exports = {
     processTaskFromSupernode,
     setBlockchainParameters,
     forwardToNextNode,
-    SUPERNODE_INDICATOR
+    SUPERNODE_INDICATOR,
+    set DB(db){
+        DB = db
+    }
 }

@@ -1,7 +1,4 @@
-var db;
-function setParameters(db){
-    db = db
-}
+var DB; //container for database
 
 function processIncomingData(data) {
     return new Promise((resolve, reject) => {
@@ -11,8 +8,8 @@ function processIncomingData(data) {
             return reject("Data not in JSON-Format")
         }
         let curTime = Date.now()
-        if (!data.time || data.time > curTime + floGlobals.supernodeConfig.delayDelta ||
-            data.time < curTime - floGlobals.supernodeConfig.delayDelta)
+        if (!data.time || data.time > curTime + floGlobals.sn_config.delayDelta ||
+            data.time < curTime - floGlobals.sn_config.delayDelta)
             return reject("Invalid Time");
         else {
             let process;
@@ -20,31 +17,27 @@ function processIncomingData(data) {
                 process = processRequestFromUser(data.request);
             else if (data.message) //Store data
                 process = processDataFromUser(data);
-            //else if (data.edit)
-            //    return processEditFromUser(gid, uid, data);
             else if (data) //Tag data
                 process = processTagFromUser(gid, uid, data);
-            //else if (data.delete)
-            //    return processDeleteFromUser(gid, uid, data);
+            /*
+            else if (data.edit)
+                return processEditFromUser(gid, uid, data);
+            else if (data.delete)
+                return processDeleteFromUser(gid, uid, data);
+            */
             else
                 return reject("Invalid Data-format")
             process.then(result => resolve(result))
                 .catch(error => reject(error))
         }
-
-        /* if (floGlobals.supernodeConfig.errorFeedback)
-                        floSupernode.supernodeClientWS.send(`@${uid}#${gid}:${error.toString()}`)
-                        */
     })
-
-
 }
 
 function processDataFromUser(data) {
     return new Promise((resolve, reject) => {
         if (!floCrypto.validateAddr(data.receiverID))
             return reject("Invalid receiverID")
-        let closeNode = floSupernode.kBucket.closestNode(data.receiverID)
+        let closeNode = kBucket.closestNode(data.receiverID)
         if (!floGlobals.serveList.includes(closeNode))
             return reject("Incorrect Supernode")
         if (!floCrypto.validateAddr(data.receiverID))
@@ -56,7 +49,7 @@ function processDataFromUser(data) {
         if (!floCrypto.verifySign(hashcontent, data.sign, data.pubKey))
             return reject("Invalid signature")
 
-        db.addData(closeNode, {
+        DB.addData(closeNode, {
                 vectorClock: `${Date.now()}_${data.senderID}`,
                 senderID: data.senderID,
                 receiverID: data.receiverID,
@@ -76,10 +69,10 @@ function processRequestFromUser(request) {
     return new Promise((resolve, reject) => {
         if (!floCrypto.validateAddr(request.receiverID))
             return reject("Invalid receiverID");
-        let closeNode = floSupernode.kBucket.closestNode(request.receiverID)
+        let closeNode = kBucket.closestNode(request.receiverID)
         if (!floGlobals.serveList.includes(closeNode))
             return reject("Incorrect Supernode");
-        db.searchData(closeNode, request)
+        DB.searchData(closeNode, request)
             .then(result => resolve([result]))
             .catch(error => reject(error))
     })
@@ -96,14 +89,14 @@ function processTagFromUser(data) {
             return reject("Invalid requestorID")
         if (data.requestorID !== floCrypto.getFloID(data.pubKey))
             return reject("Invalid pubKey")
-        let closeNode = floSupernode.kBucket.closestNode(data.receiverID)
+        let closeNode = kBucket.closestNode(data.receiverID)
         if (!floGlobals.serveList.includes(closeNode))
             return reject("Incorrect Supernode")
         let hashcontent = ["time", "application", "tag"]
             .map(d => data[d]).join("|");
         if (!floCrypto.verifySign(hashcontent, data.sign, data.pubKey))
             return reject("Invalid signature");
-        db.tagData(closeNode, data.vectorClock, data.tag, data.time, data.pubKey, data.sign)
+        DB.tagData(closeNode, data.vectorClock, data.tag, data.time, data.pubKey, data.sign)
             .then(result => resolve([result, 'TAG']))
             .catch(error => reject(error))
     })
@@ -137,5 +130,8 @@ module.exports = {
     setParameters,
     checkIfRequestSatisfy,
     processRequestFromUser,
-    processIncomingData
+    processIncomingData,
+    set DB(db){
+        DB = db
+    }
 }

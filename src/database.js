@@ -3,14 +3,14 @@ var mysql = require('mysql');
 
 const Base_Tables = {
     LastTxs: {
-        K: "CHAR(34) NOT NULL",
+        ID: "CHAR(34) NOT NULL",
         N: "INT NOT NULL",
-        PRIMARY: "KEY (K)"
+        PRIMARY: "KEY (ID)"
     },
     Configs: {
-        K: "VARCHAR(64) NOT NULL",
-        V: "VARCHAR(512) NOT NULL",
-        PRIMARY: "KEY (K)"
+        NAME: "VARCHAR(64) NOT NULL",
+        VAL: "VARCHAR(512) NOT NULL",
+        PRIMARY: "KEY (NAME)"
     },
     SuperNodes: {
         FLO_ID: "CHAR(34) NOT NULL",
@@ -21,11 +21,10 @@ const Base_Tables = {
     Applications: {
         APP_NAME: "VARCHAR(64) NOT NULL",
         ADMIN_ID: "CHAR(34) NOT NULL",
-        SUB_ADMINS: "VARCHAR(MAX) NOT NULL",
+        SUB_ADMINS: "VARCHAR(MAX)",
         PRIMARY: "KEY (APP_NAME)"
     }
 }
-
 
 const H_struct = {
     VECTOR_CLOCK: "vectorClock",
@@ -57,17 +56,100 @@ const T_struct = {
 
 function Database(user, password, dbname, host = 'localhost') {
     const db = {};
+    db.query = (s, v) => new Promise((res, rej) => {
+        const fn = (e, r) => e ? rej(e) : res(r)
+        v ? db.conn.query(s, v, fn) : db.conn.query(s, fn)
+    });
 
     db.createBase = function() {
         return new Promise((resolve, reject) => {
             let statements = []
-            for (t in Base_Tables)
+            for (let t in Base_Tables)
                 statements.push("CREATE TABLE IF NOT EXISTS " + t + "( " +
                     Object.keys(Base_Tables[t]).map(a => a + " " + Base_Tables[t][a]).join(", ") + " )");
-            let query = s => new Promise((res, rej) => db.conn.query(s, (e, r) => e ? res(e) : rej(r)));
-            Promise.all(statements.forEach(s => query(s)))
+            Promise.all(statements.forEach(s => db.query(s)))
                 .then(result => resolve(result))
                 .catch(error => reject(error))
+        })
+    }
+
+    db.setLastTx = function(id, n) {
+        return new Promise((resolve, reject) => {
+            let statement = "INSERT INTO LastTxs (ID, N) VALUES (?, ?)" +
+                " ON DUPLICATE KEY UPDATE N=?";
+            db.query(statement, [id, n, n])
+                .then(result => resolve(result))
+                .catch(error => reject(error))
+        })
+    }
+
+    db.setConfig = function(name, value) {
+        return new Promise((resolve, reject) => {
+            let statement = "INSERT INTO Configs (NAME, VAL) VALUES (?, ?)" +
+                " ON DUPLICATE KEY UPDATE VAL=?";
+            db.query(statement, [name, value, value])
+                .then(result => resolve(result))
+                .catch(error => reject(error))
+        })
+    }
+
+    db.addSuperNode = function(id, pubKey, uri) {
+        let statement = "INSERT INTO SuperNodes (FLO_ID, PUB_KEY, URI) VALUES (?, ?, ?)" +
+            " ON DUPLICATE KEY UPDATE URI=?";
+        db.query(statement, [id, pubKey, uri, uri])
+            .then(result => resolve(result))
+            .catch(error => reject(error))
+    }
+
+    db.rmSuperNode = function(id) {
+        let statement = "DELETE FROM SuperNodes" +
+            " WHERE FLO_ID=?";
+        db.query(statement, id)
+            .then(result => resolve(result))
+            .catch(error => reject(error))
+    }
+
+    db.setSubAdmin = function(appName, subAdmins) {
+        let statement = "UPDATE Applications" +
+            " SET SUB_ADMINS=?" +
+            " WHERE APP_NAME=?";
+        db.query(statement, [subAdmins.join(","), appName])
+            .then(result => resolve(result))
+            .catch(error => reject(error))
+    }
+
+    db.addApp = function(appName, adminID) {
+        let statement = "INSERT INTO Applications (APP_NAME, ADMIN_ID) VALUES (?, ?)" +
+            " ON DUPLICATE KEY UPDATE ADMIN_ID=?";
+        db.query(statement, [appName, adminID, adminID])
+            .then(result => resolve(result))
+            .catch(error => reject(error))
+    }
+
+    db.rmApp = function(appName) {
+        let statement = "DELETE FROM Applications" +
+            " WHERE APP_NAME=" + appName;
+        db.query(statement)
+            .then(result => resolve(result))
+            .catch(error => reject(error))
+    }
+
+    db.getBase = function() {
+        return new Promise((resolve, reject) => {
+            let tables = Object.keys(Base_Tables);
+            Promise.all(tables.forEach(t => db.query("SELECT * FROM " + t))).then(result => {
+                let tmp = Object.fromEntries(tables.map((t, i) => [t, result[i]]))
+                result = {};
+                result.lastTx = Object.fromEntries(tmp.LastTxs.map(a => [a.ID, a.N]));
+                result.sn_config = Object.fromEntries(tmp.Configs.map(a => [a.NAME, a.VAL]));
+                result.appList = Object.fromEntries(tmp.Applications.map(a => [a.APP_NAME, a.ADMIN_ID]));
+                result.appSubAdmins = Object.fromEntries(tmp.Applications.map(a => [a.APP_NAME, a.SUB_ADMINS.split(",")]))
+                result.supernodes = Object.fromEntries(tmp.SuperNodes.map(a.FLO_ID, {
+                    pubKey: a.PUB_KEY,
+                    uri: a.URI
+                }))
+                resolve(result)
+            }).catch(error => reject(error))
         })
     }
 
@@ -92,14 +174,18 @@ function Database(user, password, dbname, host = 'localhost') {
                 T_struct.TAG_SIGN + " VARCHAR(160), " +
                 "PRIMARY KEY (" + H_struct.VECTOR_CLOCK + ")" +
                 " )";
-            db.conn.query(statement, (err, res) => err ? reject(err) : resolve(res));
+            db.query(statement)
+                .then(result => resolve(result))
+                .catch(error => reject(error))
         })
     }
 
     db.dropTable = function(snID) {
         return new Promise((resolve, reject) => {
             let statement = "DROP TABLE " + snID;
-            db.conn.query(statement, (err, res) => err ? reject(err) : resolve(res));
+            db.query(statement)
+                .then(result => resolve(result))
+                .catch(error => reject(error))
         })
     }
 
@@ -113,7 +199,9 @@ function Database(user, password, dbname, host = 'localhost') {
             data = Object.fromEntries(attr.map((a, i) => [
                 [a, values[i]]
             ]));
-            db.conn.query(statement, values, (err, res) => err ? reject(err) : resolve(data));
+            db.query(statement, values)
+                .then(result => resolve(data))
+                .catch(error => reject(error))
         })
     }
 
@@ -124,16 +212,17 @@ function Database(user, password, dbname, host = 'localhost') {
                 [T_struct.TAG_TIME]: tagTime,
                 [T_struct.TAG_KEY]: tagKey,
                 [T_struct.TAG_SIGN]: tagSign,
-                [L_struct.LOG_TIME]: Date.now(),
-                [H_struct.VECTOR_CLOCK]: vectorClock
+                [L_struct.LOG_TIME]: Date.now()
             }
             let attr = Object.keys(data);
-            let values = attr.map(a => data[a]);
+            let values = attr.map(a => data[a]).concat(vectorClock);
             data[H_struct.VECTOR_CLOCK] = vectorClock; //also add vectorClock to resolve data
             let statement = "UPDATE " + snID +
                 " SET " + attr.map(a => a + "=?").join(", ") +
-                " WHERE " + H_struct.VECTOR_CLOCK + "=" + vectorClock;
-            db.conn.query(statement, values, (err, res) => err ? reject(err) : resolve(data));
+                " WHERE " + H_struct.VECTOR_CLOCK + "=?";
+            db.query(statement, values)
+                .then(result => resolve(data))
+                .catch(error => reject(error))
         })
     }
 
@@ -163,18 +252,23 @@ function Database(user, password, dbname, host = 'localhost') {
                     conditionArr.push(`${H_struct.SENDER_ID} = '${request.senderID}'`)
             }
             //console.log(conditionArr);
-            let statement = "SELECT (" + Object.keys(H_struct).join(", ") + ")" +
+            let attr = Object.keys(H_struct).concat(Object.keys(B_struct))
+            let statement = "SELECT (" + attr.join(", ") + ")" +
                 " FROM " + snID +
                 " WHERE " + conditionArr.join(" AND ") +
                 request.mostRecent ? "LIMIT 1" : (" ORDER BY " + H_struct.VECTOR_CLOCK);
-            db.conn.query(statement, (err, res) => err ? reject(err) : resolve(res));
+            db.query(statement)
+                .then(result => resolve(result))
+                .catch(error => reject(error))
         })
     }
 
     db.lastLogTime = function(snID) {
         return new Promise((resolve, reject) => {
             let statement = "SELECT MAX(" + L_struct.LOG_TIME + ") FROM " + snID;
-            db.conn.query(statement, (err, res) => err ? reject(err) : resolve(res))
+            db.query(statement)
+                .then(result => resolve(result))
+                .catch(error => reject(error))
         })
     }
 
@@ -193,7 +287,9 @@ function Database(user, password, dbname, host = 'localhost') {
             let statement = "SELECT * FROM " + snID +
                 " WHERE " + L_struct.LOG_TIME + ">=" + logtime +
                 " ORDER BY " + L_struct.LOG_TIME;
-            db.conn.query(statement, (err, res) => err ? reject(err) : resolve(res))
+            db.query(statement)
+                .then(result => resolve(result))
+                .catch(error => reject(error))
         })
     }
 
@@ -207,7 +303,9 @@ function Database(user, password, dbname, host = 'localhost') {
                 " (" + attr.join(", ") + ", " + L_struct.STATUS + ", " + L_struct.LOG_TIME + ") " +
                 "VALUES (" + attr.map(a => '?').join(", ") + ", 1, " + Date.now() + ") " +
                 "ON DUPLICATE KEY UPDATE " + u_attr.map(a => a + "=?").join(", ");
-            db.conn.query(statement, values.concat(u_values), (err, res) => err ? reject(err) : resolve(res));
+            db.query(statement, values.concat(u_values))
+                .then(result => resolve(data))
+                .catch(error => reject(error))
         })
     }
 
@@ -218,7 +316,9 @@ function Database(user, password, dbname, host = 'localhost') {
             let statement = "UPDATE " + snID +
                 " SET " + attr.map(a => a + "=?").join(", ") +
                 " WHERE " + H_struct.VECTOR_CLOCK + "=" + data[H_struct.VECTOR_CLOCK];
-            db.conn.query(statement, values, (err, res) => err ? reject(err) : resolve(data));
+            db.query(statement, values)
+                .then(result => resolve(data))
+                .catch(error => reject(error))
         })
     }
 

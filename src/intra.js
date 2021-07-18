@@ -412,7 +412,7 @@ function sendStoredData(lastlogs, node) {
                     id: n,
                     status: false
                 }))
-            }).catch(error => reject(error))
+            }).catch(error => console.error(error))
         }
     }
 }
@@ -457,11 +457,17 @@ function forwardToNextNode(mode, data) {
         }));
 }
 
+function dataMigration(node_change){
+    console.log("data migration")
+    //TODO
+}
+
 //-----EXPORTS-----
 module.exports = {
     processTaskFromSupernode,
     setBlockchainParameters,
     forwardToNextNode,
+    dataMigration,
     SUPERNODE_INDICATOR,
     _list,
     set DB(db){

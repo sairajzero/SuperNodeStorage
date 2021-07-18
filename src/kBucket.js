@@ -31,16 +31,16 @@ require('./lib/BuildKBucket')
         return KB;
     }
 
-    kBucket.launch = function(masterID, superNodeList) {
+    kBucket.launch = function() {
         return new Promise((resolve, reject) => {
             try {
-                //let superNodeList = Object.keys(floGlobals.supernodes);
-                //let masterID = floGlobals.SNStorageID;
+                let superNodeList = Object.keys(floGlobals.supernodes);
+                let masterID = floGlobals.SNStorageID;
                 SNKB = constructKB(superNodeList, masterID);
                 SNCO = superNodeList.map(sn => [distanceOf(sn), sn])
                     .sort((a, b) => a[0] - b[0])
                     .map(a => a[1])
-                resolve('Supernode KBucket formed');
+                resolve('SuperNode KBucket formed');
             } catch (error) {
                 reject(error);
             }

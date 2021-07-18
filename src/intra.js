@@ -5,16 +5,11 @@ const WebSocket = require('ws');
 const SUPERNODE_INDICATOR = '$',
     //Message type
     ORDER_BACKUP = "orderBackup",
-    START_BACKUP_SERVE = "startBackupServe",
-    STOP_BACKUP_SERVE = "stopBackupServe",
-    START_BACKUP_STORE = "startBackupStore",
-    STOP_BACKUP_STORE = "stopBackupStore",
     STORE_BACKUP_DATA = "backupData",
-    STORE_MIGRATED_DATA = "migratedData",
-    DELETE_BACKUP_DATA = "backupDelete",
+    //STORE_MIGRATED_DATA = "migratedData",
+    //DELETE_BACKUP_DATA = "backupDelete",
     TAG_BACKUP_DATA = "backupTag",
-    EDIT_BACKUP_DATA = "backupEdit",
-    NODE_ONLINE = "supernodeUp",
+    //EDIT_BACKUP_DATA = "backupEdit",
     INITIATE_REFRESH = "initiateRefresh",
     DATA_REQUEST = "dataRequest",
     DATA_SYNC = "dataSync",
@@ -267,9 +262,11 @@ function processTaskFromSupernode(packet, ws) {
                 case BACKUP_HANDSHAKE_INIT:
                     handshakeMid(from, ws)
                     break;
+                /*
                 case STORE_MIGRATED_DATA: //TODO
                     storeMigratedData(task.data)
                     break;
+                */
             }
         });
     }
@@ -466,6 +463,7 @@ module.exports = {
     setBlockchainParameters,
     forwardToNextNode,
     SUPERNODE_INDICATOR,
+    _list,
     set DB(db){
         DB = db
     }

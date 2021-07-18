@@ -1,4 +1,4 @@
-var DB; //container for database
+var DB, _list; //container for database and _list (stored n serving)
 
 function processIncomingData(data) {
     return new Promise((resolve, reject) => {
@@ -38,7 +38,7 @@ function processDataFromUser(data) {
         if (!floCrypto.validateAddr(data.receiverID))
             return reject("Invalid receiverID")
         let closeNode = kBucket.closestNode(data.receiverID)
-        if (!floGlobals.serveList.includes(closeNode))
+        if (!_list.serving.includes(closeNode))
             return reject("Incorrect Supernode")
         if (!floCrypto.validateAddr(data.receiverID))
             return reject("Invalid senderID")
@@ -70,7 +70,7 @@ function processRequestFromUser(request) {
         if (!floCrypto.validateAddr(request.receiverID))
             return reject("Invalid receiverID");
         let closeNode = kBucket.closestNode(request.receiverID)
-        if (!floGlobals.serveList.includes(closeNode))
+        if (!_list.serving.includes(closeNode))
             return reject("Incorrect Supernode");
         DB.searchData(closeNode, request)
             .then(result => resolve([result]))
@@ -90,7 +90,7 @@ function processTagFromUser(data) {
         if (data.requestorID !== floCrypto.getFloID(data.pubKey))
             return reject("Invalid pubKey")
         let closeNode = kBucket.closestNode(data.receiverID)
-        if (!floGlobals.serveList.includes(closeNode))
+        if (!_list.serving.includes(closeNode))
             return reject("Incorrect Supernode")
         let hashcontent = ["time", "application", "tag"]
             .map(d => data[d]).join("|");
@@ -133,5 +133,8 @@ module.exports = {
     processIncomingData,
     set DB(db){
         DB = db
+    },
+    set _list(list){
+        _list = list
     }
 }

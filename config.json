@@ -1,9 +1,0 @@
-{
-    "privateKey": "Replace_With_Private_Key",
-    "port": "8080",
-
-    "sql_user": "user",
-    "sql_pwd": "password",
-    "sql_db": "supernode",
-    "sql_host": "localhost"
-}

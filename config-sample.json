@@ -1,0 +1,9 @@
+{
+    "privateKey": "FLO_Private_Key_of_SuperNode",
+    "port": "8080",
+
+    "sql_user": "mySQL_user",
+    "sql_pwd": "mySQL_password",
+    "sql_db": "supernode",
+    "sql_host": "localhost"
+}

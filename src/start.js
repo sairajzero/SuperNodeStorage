@@ -34,6 +34,7 @@ function startNode() {
             //Start Server
             const server = new Server(config["port"], client, intra);
             server.refresher = refreshData;
+            intra.refresher = refreshData;
         }).catch(error => reject(error))
     }).catch(error => reject(error))
 }
@@ -51,13 +52,13 @@ function loadBase(DB) {
 const refreshData = {
     count: null,
     base: null,
-    invoke() {
+    invoke(flag = true) {
         this.count = floGlobals.sn_config.refreshDelay;
-        refreshBlockchainData(this.base).then(result => {
+        refreshBlockchainData(this.base, flag).then(result => {
             console.log(result)
-            diskCleanUp()
+            diskCleanUp(this.base)
                 .then(result => console.info(result))
-                .catch(error => console.error(error))
+                .catch(warn => console.warn(warn))
         }).catch(error => console.error(error))
     },
     get countdown() {
@@ -67,22 +68,22 @@ const refreshData = {
     }
 }
 
-function refreshBlockchainData(base) {
+function refreshBlockchainData(base, flag) {
     return new Promise((resolve, reject) => {
-        readSupernodeConfigFromAPI(base).then(result => {
+        readSupernodeConfigFromAPI(base, flag).then(result => {
             console.log(result)
             kBucket.launch().then(result => {
                 console.log(result)
                 readAppSubAdminListFromAPI(base)
                     .then(result => console.log(result))
-                    .catch(error => console.warn(error))
+                    .catch(warn => console.warn(warn))
                     .finally(_ => resolve("Refreshed Data from blockchain"))
             }).catch(error => reject(error))
         }).catch(error => reject(error))
     })
 }
 
-function readSupernodeConfigFromAPI(base) {
+function readSupernodeConfigFromAPI(base, flag) {
     return new Promise((resolve, reject) => {
         floBlockchainAPI.readData(floGlobals.SNStorageID, {
             ignoreOld: base.lastTx[floGlobals.SNStorageID],
@@ -140,7 +141,7 @@ function readSupernodeConfigFromAPI(base) {
             });
             //Process data migration if nodes are changed
             if (Object.keys(node_change))
-                intra.dataMigration(node_change)
+                intra.dataMigration(node_change, flag)
             resolve('Updated Supernode Configuration');
         }).catch(error => reject(error))
     })
@@ -177,7 +178,7 @@ function readAppSubAdminListFromAPI(base) {
         }));
     }
     return new Promise((resolve, reject) => {
-        Promise.allSettled(results => {
+        Promise.allSettled(promises).then(results => {
             if (results.reduce((a, r) => r.status === "rejected" ? ++a : a, 0)) {
                 let error = Object.fromEntries(results.filter(r => r.status === "rejected").map(r => r.reason));
                 console.error(JSON.stringify(error));
@@ -188,8 +189,29 @@ function readAppSubAdminListFromAPI(base) {
     })
 }
 
-function diskCleanUp(){
-    //TODO: Clear all unauthorised data from before deleteDelay
+function diskCleanUp(base) {
+    return new Promise((resolve, reject) => {
+        let time = Date.now() - base.sn_config.deleteDelay,
+            promises = [];
+
+        intra._list.serving.forEach(sn => {
+            //delete all when app is not authorised.
+            promises.push(DB.clearUnauthorisedAppData(sn, Object.keys(base.appList), time));
+            //for each authorised app: delete unofficial data (untaged, unknown sender/receiver)
+            for (let app in base.appList)
+                promises.push(DB.clearAuthorisedAppData(sn, app, base.appList[app], base.subAdmins[app], time));
+        })
+
+        Promise.allSettled(promises).then(results => {
+            let failed = results.filter(r => r.status === "rejected").map(r => r.reason)
+            if (failed.length) {
+                console.error(JSON.stringify(failed));
+                let success = results.length - failed.length;
+                reject(`Disk clean-up process has failed at ${100 * success/results.length}%. (Success:${success}|Failed:${failed.count})`)
+            } else
+                resolve("Disk clean-up process finished successfully (100%)");
+        }).catch(error => reject(error))
+    })
 }
 
 module.exports = startNode;

@@ -96,7 +96,8 @@ function processTagFromUser(data) {
             .map(d => data[d]).join("|");
         if (!floCrypto.verifySign(hashcontent, data.sign, data.pubKey))
             return reject("Invalid signature");
-        DB.tagData(closeNode, data.vectorClock, data.tag, data.time, data.pubKey, data.sign)
+        let tag = [null, undefined, ""].includes(data.tag) ? null : [data.tag].toString();
+        DB.tagData(closeNode, data.vectorClock, tag, data.time, data.pubKey, data.sign)
             .then(result => resolve([result, 'TAG']))
             .catch(error => reject(error))
     })

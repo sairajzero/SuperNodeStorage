@@ -31,14 +31,14 @@ const H_struct = {
     SENDER_ID: "senderID",
     RECEIVER_ID: "receiverID",
     TYPE: "type",
-    APPLICATION: "application"
+    APPLICATION: "application",
+    TIME: "time",
+    PUB_KEY: "pubKey"
 }
 
 const B_struct = {
-    TIME: "time",
     MESSAGE: "message",
     SIGNATURE: "sign",
-    PUB_KEY: "pubKey",
     COMMENT: "comment"
 }
 
@@ -155,7 +155,7 @@ function Database(user, password, dbname, host = 'localhost') {
 
     db.createTable = function(snID) {
         return new Promise((resolve, reject) => {
-            let statement = "CREATE TABLE IF NOT EXISTS " + snID + " ( " +
+            let statement = "CREATE TABLE IF NOT EXISTS _" + snID + " ( " +
                 H_struct.VECTOR_CLOCK + " VARCHAR(50) NOT NULL, " +
                 H_struct.SENDER_ID + " CHAR(34) NOT NULL, " +
                 H_struct.RECEIVER_ID + " CHAR(34) NOT NULL, " +
@@ -182,7 +182,7 @@ function Database(user, password, dbname, host = 'localhost') {
 
     db.dropTable = function(snID) {
         return new Promise((resolve, reject) => {
-            let statement = "DROP TABLE " + snID;
+            let statement = "DROP TABLE _" + snID;
             db.query(statement)
                 .then(result => resolve(result))
                 .catch(error => reject(error))
@@ -193,7 +193,7 @@ function Database(user, password, dbname, host = 'localhost') {
         return new Promise((resolve, reject) => {
             let attr = Object.keys(H_struct).map(a => H_struct[a]);
             let values = attr.map(a => data[a]);
-            let statement = "INSERT INTO " + snID +
+            let statement = "INSERT INTO _" + snID +
                 " (" + attr.join(", ") + ", " + L_struct.STATUS + ", " + L_struct.LOG_TIME + ") " +
                 "VALUES (" + attr.map(a => '?').join(", ") + ", 1, " + Date.now() + ")";
             data = Object.fromEntries(attr.map((a, i) => [
@@ -217,7 +217,7 @@ function Database(user, password, dbname, host = 'localhost') {
             let attr = Object.keys(data);
             let values = attr.map(a => data[a]).concat(vectorClock);
             data[H_struct.VECTOR_CLOCK] = vectorClock; //also add vectorClock to resolve data
-            let statement = "UPDATE " + snID +
+            let statement = "UPDATE _" + snID +
                 " SET " + attr.map(a => a + "=?").join(", ") +
                 " WHERE " + H_struct.VECTOR_CLOCK + "=?";
             db.query(statement, values)
@@ -254,7 +254,7 @@ function Database(user, password, dbname, host = 'localhost') {
             //console.log(conditionArr);
             let attr = Object.keys(H_struct).concat(Object.keys(B_struct))
             let statement = "SELECT (" + attr.join(", ") + ")" +
-                " FROM " + snID +
+                " FROM _" + snID +
                 " WHERE " + conditionArr.join(" AND ") +
                 request.mostRecent ? "LIMIT 1" : (" ORDER BY " + H_struct.VECTOR_CLOCK);
             db.query(statement)
@@ -265,7 +265,7 @@ function Database(user, password, dbname, host = 'localhost') {
 
     db.lastLogTime = function(snID) {
         return new Promise((resolve, reject) => {
-            let statement = "SELECT MAX(" + L_struct.LOG_TIME + ") FROM " + snID;
+            let statement = "SELECT MAX(" + L_struct.LOG_TIME + ") FROM _" + snID;
             db.query(statement)
                 .then(result => resolve(result))
                 .catch(error => reject(error))
@@ -284,7 +284,7 @@ function Database(user, password, dbname, host = 'localhost') {
 
     db.getData = function(snID, logtime) {
         return new Promise((resolve, reject) => {
-            let statement = "SELECT * FROM " + snID +
+            let statement = "SELECT * FROM _" + snID +
                 " WHERE " + L_struct.LOG_TIME + ">=" + logtime +
                 " ORDER BY " + L_struct.LOG_TIME;
             db.query(statement)
@@ -299,7 +299,7 @@ function Database(user, password, dbname, host = 'localhost') {
             let attr = Object.keys(H_struct).map(a => H_struct[a]).concat(u_attr);
             let values = attr.map(a => data[a]);
             let u_values = u_attr.map(a => data[a]);
-            let statement = "INSERT INTO " + snID +
+            let statement = "INSERT INTO _" + snID +
                 " (" + attr.join(", ") + ", " + L_struct.STATUS + ", " + L_struct.LOG_TIME + ") " +
                 "VALUES (" + attr.map(a => '?').join(", ") + ", 1, " + Date.now() + ") " +
                 "ON DUPLICATE KEY UPDATE " + u_attr.map(a => a + "=?").join(", ");
@@ -313,11 +313,36 @@ function Database(user, password, dbname, host = 'localhost') {
         return new Promise((resolve, reject) => {
             let attr = Object.keys(T_struct).map(a => T_struct[a]).concat(L_struct.LOG_TIME);
             let values = attr.map(a => data[a]);
-            let statement = "UPDATE " + snID +
+            let statement = "UPDATE _" + snID +
                 " SET " + attr.map(a => a + "=?").join(", ") +
                 " WHERE " + H_struct.VECTOR_CLOCK + "=" + data[H_struct.VECTOR_CLOCK];
             db.query(statement, values)
                 .then(result => resolve(data))
+                .catch(error => reject(error))
+        })
+    }
+
+    db.clearAuthorisedAppData = function(snID, app, adminID, subAdmins, timestamp) {
+        return new Promise((resolve, reject) => {
+            let statement = "DELETE FROM _" + snID +
+                " WHERE ( " + H_struct.TIME + "<? AND " +
+                H_struct.APPLICATION + "=? AND " +
+                T_struct.TAG + " IS NULL ) AND ( " +
+                H_struct.RECEIVER_ID + " != ? OR " +
+                H_struct.SENDER_ID + " NOT IN (" + subAdmins.map(a => "?").join(", ") + ") )";
+            db.query(statement, [timestamp, app].concat(subAdmins).push(adminID))
+                .then(result => resolve(result))
+                .catch(error => reject(error))
+        })
+    }
+
+    db.clearUnauthorisedAppData = function(snID, appList, timestamp) {
+        return new Promise((resolve, reject) => {
+            let statement = "DELETE FROM _" + snID +
+                "WHERE " + H_struct.TIME + "<? AND " +
+                H_struct.APPLICATION + " NOT IN (" + appList.map(a => "?").join(", ") + ")";
+            db.query(statement, [timestamp].concat(appList))
+                .then(result => resolve(result))
                 .catch(error => reject(error))
         })
     }

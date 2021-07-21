@@ -1,5 +1,5 @@
 {
-    "privateKey": "Replace_with_private_key",
+    "privateKey": "Replace_With_Private_Key",
     "port": "8080",
 
     "sql_user": "user",

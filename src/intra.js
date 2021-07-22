@@ -686,7 +686,6 @@ dataMigration.intimateAllNodes = function() {
 //-----EXPORTS-----
 module.exports = {
     processTaskFromSupernode,
-    setBlockchainParameters,
     forwardToNextNode,
     dataMigration,
     SUPERNODE_INDICATOR,

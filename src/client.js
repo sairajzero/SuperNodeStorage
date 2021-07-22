@@ -128,7 +128,6 @@ function checkIfRequestSatisfy(request, data) {
 }
 
 module.exports = {
-    setParameters,
     checkIfRequestSatisfy,
     processRequestFromUser,
     processIncomingData,

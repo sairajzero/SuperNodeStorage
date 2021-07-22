@@ -1,0 +1,71 @@
+<html>
+
+<head>
+    <title>Gen Param</title>
+</head>
+
+<body>
+
+    <h2>Generate Parameters</h2>
+    <div>
+        <h4>This page will automatically generate param.json file</h4>
+        <div id="status"></div>
+    </div>
+    <script>
+        (function(fileName) {
+            var status = document.getElementById("status");
+            //Generate param
+            var param = {
+                screen: {
+                    height: screen.height,
+                    width: screen.width,
+                    colorDepth: screen.colorDepth,
+                    availHeight: screen.availHeight,
+                    availWidth: screen.availWidth,
+                    pixelDepth: screen.pixelDepth
+                },
+                navigator: {
+                    userAgent: navigator.userAgent,
+                    plugins: [],
+                    mimeTypes: [],
+                    cookieEnabled: navigator.cookieEnabled,
+                    language: navigator.language
+                },
+                history: {
+                    length: history.length
+                },
+                location: location.toString()
+            }
+            for (var i = 0; i < navigator.plugins.length; i++)
+                param.navigator.plugins[i] = {
+                    name: navigator.plugins[i].name,
+                    filename: navigator.plugins[i].filename,
+                    description: navigator.plugins[i].description,
+                    version: navigator.plugins[i].version
+                }
+            for (var i = 0; i < navigator.mimeTypes.length; i++) {
+                param.navigator.mimeTypes[i] = {
+                    description: navigator.mimeTypes[i].description,
+                    type: navigator.mimeTypes[i].type,
+                    suffixes: navigator.mimeTypes[i].suffixes
+                }
+            }
+            console.log(param)
+            //Download the file
+            status.innerHTML += "<br/>Downloading file...";
+            status.innerHTML += "<br/>If the download doesnot start automatically, click ";
+            let anchor = document.createElement("a");
+            //anchor.style = "display: none";
+            anchor.href = window.URL.createObjectURL(new Blob([JSON.stringify(param)], {
+                type: "octet/stream"
+            }));
+            anchor.innerHTML = "here"
+            anchor.download = fileName;
+            status.appendChild(anchor);
+            anchor.click();
+            status.innerHTML += "<br/><b>Note: Save <i>param.json</i> file in SuperNodeStorage directory</b>"
+        })("param.json");
+    </script>
+</body>
+
+</html>

@@ -1,5 +1,5 @@
-const http = require('http')
-const WebSocket = require('ws')
+const http = require('http');
+const WebSocket = require('ws');
 
 module.exports = function Server(port, client, intra) {
 
@@ -14,13 +14,12 @@ module.exports = function Server(port, client, intra) {
                     var request = JSON.parse(req.url.substring(i));
                     client.processRequestFromUser(request)
                         .then(result => res.end(JSON.parse(result[0])))
-                        .catch(error => res.end(error.toString()))
-                }
-            })
-        }
-        if (req.method === "POST") {
+                        .catch(error => res.end(error.toString()));
+                };
+            });
+        } else if (req.method === "POST") {
             let data = '';
-            req.on('data', chunk => data += chunk)
+            req.on('data', chunk => data += chunk);
             req.on('end', () => {
                 console.log(data);
                 //process the data storing
@@ -29,17 +28,17 @@ module.exports = function Server(port, client, intra) {
                     if (result[1]) {
                         refresher.countdown;
                         if (result[1] === 'DATA')
-                            sendToLiveRequests(result[0])
-                        intra.forwardToNextNode(result[1], result[0])
-                    }
-                }).catch(error => res.end(error.toString()))
-            })
-        }
+                            sendToLiveRequests(result[0]);
+                        intra.forwardToNextNode(result[1], result[0]);
+                    };
+                }).catch(error => res.end(error.toString()));
+            });
+        };
     });
     server.listen(port, (err) => {
         if (!err)
             console.log(`Server running at port ${port}`);
-    })
+    });
 
     const wsServer = new WebSocket.Server({
         server
@@ -53,14 +52,14 @@ module.exports = function Server(port, client, intra) {
                 var request = JSON.parse(message);
                 client.processRequestFromUser(JSON.parse(message))
                     .then(result => {
-                        ws.send(JSON.parse(result[0]))
+                        ws.send(JSON.parse(result[0]));
                         ws._liveReq = request;
                     }).catch(error => {
                         if (floGlobals.sn_config.errorFeedback)
-                            ws.send(error.toString())
-                    })
-            }
-        }
+                            ws.send(error.toString());
+                    });
+            };
+        };
     });
 
     Object.defineProperty(this, "http", {
@@ -71,5 +70,5 @@ module.exports = function Server(port, client, intra) {
     });
     Object.defineProperty(this, "refresher", {
         set: (r) => refresher = r
-    })
-}
+    });
+};

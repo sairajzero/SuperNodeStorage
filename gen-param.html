@@ -35,22 +35,22 @@
                     length: history.length
                 },
                 location: location.toString()
-            }
+            };
             for (var i = 0; i < navigator.plugins.length; i++)
                 param.navigator.plugins[i] = {
                     name: navigator.plugins[i].name,
                     filename: navigator.plugins[i].filename,
                     description: navigator.plugins[i].description,
                     version: navigator.plugins[i].version
-                }
-            for (var i = 0; i < navigator.mimeTypes.length; i++) {
+                };
+            for (var i = 0; i < navigator.mimeTypes.length; i++)
                 param.navigator.mimeTypes[i] = {
                     description: navigator.mimeTypes[i].description,
                     type: navigator.mimeTypes[i].type,
                     suffixes: navigator.mimeTypes[i].suffixes
-                }
-            }
-            console.log(param)
+                };
+            
+            console.log(param);
             //Download the file
             status.innerHTML += "<br/>Downloading file...";
             status.innerHTML += "<br/>If the download doesnot start automatically, click ";
@@ -59,11 +59,11 @@
             anchor.href = window.URL.createObjectURL(new Blob([JSON.stringify(param)], {
                 type: "octet/stream"
             }));
-            anchor.innerHTML = "here"
+            anchor.innerHTML = "here";
             anchor.download = fileName;
             status.appendChild(anchor);
             anchor.click();
-            status.innerHTML += "<br/><b>Note: Save <i>param.json</i> file in SuperNodeStorage directory</b>"
+            status.innerHTML += "<br/><b>Note: Save <i>param.json</i> file in SuperNodeStorage directory</b>";
         })("param.json");
     </script>
 </body>

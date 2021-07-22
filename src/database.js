@@ -24,7 +24,7 @@ const Base_Tables = {
         SUB_ADMINS: "VARCHAR(MAX)",
         PRIMARY: "KEY (APP_NAME)"
     }
-}
+};
 
 const H_struct = {
     VECTOR_CLOCK: "vectorClock",
@@ -34,44 +34,44 @@ const H_struct = {
     APPLICATION: "application",
     TIME: "time",
     PUB_KEY: "pubKey"
-}
+};
 
 const B_struct = {
     MESSAGE: "message",
     SIGNATURE: "sign",
     COMMENT: "comment"
-}
+};
 
 const L_struct = {
     STATUS: "status_n",
     LOG_TIME: "log_time"
-}
+};
 
 const T_struct = {
     TAG: "tag",
     TAG_TIME: "tag_time",
     TAG_KEY: "tag_key",
     TAG_SIGN: "tag_sign"
-}
+};
 
 function Database(user, password, dbname, host = 'localhost') {
     const db = {};
     db.query = (s, v) => new Promise((res, rej) => {
-        const fn = (e, r) => e ? rej(e) : res(r)
-        v ? db.conn.query(s, v, fn) : db.conn.query(s, fn)
+        const fn = ((e, r) => e ? rej(e) : res(r));
+        v ? db.conn.query(s, v, fn) : db.conn.query(s, fn);
     });
 
     db.createBase = function() {
         return new Promise((resolve, reject) => {
-            let statements = []
+            let statements = [];
             for (let t in Base_Tables)
                 statements.push("CREATE TABLE IF NOT EXISTS " + t + "( " +
                     Object.keys(Base_Tables[t]).map(a => a + " " + Base_Tables[t][a]).join(", ") + " )");
             Promise.all(statements.forEach(s => db.query(s)))
                 .then(result => resolve(result))
-                .catch(error => reject(error))
-        })
-    }
+                .catch(error => reject(error));
+        });
+    };
 
     db.setLastTx = function(id, n) {
         return new Promise((resolve, reject) => {
@@ -79,9 +79,9 @@ function Database(user, password, dbname, host = 'localhost') {
                 " ON DUPLICATE KEY UPDATE N=?";
             db.query(statement, [id, n, n])
                 .then(result => resolve(result))
-                .catch(error => reject(error))
-        })
-    }
+                .catch(error => reject(error));
+        });
+    };
 
     db.setConfig = function(name, value) {
         return new Promise((resolve, reject) => {
@@ -89,69 +89,79 @@ function Database(user, password, dbname, host = 'localhost') {
                 " ON DUPLICATE KEY UPDATE VAL=?";
             db.query(statement, [name, value, value])
                 .then(result => resolve(result))
-                .catch(error => reject(error))
-        })
-    }
+                .catch(error => reject(error));
+        });
+    };
 
     db.addSuperNode = function(id, pubKey, uri) {
-        let statement = "INSERT INTO SuperNodes (FLO_ID, PUB_KEY, URI) VALUES (?, ?, ?)" +
-            " ON DUPLICATE KEY UPDATE URI=?";
-        db.query(statement, [id, pubKey, uri, uri])
-            .then(result => resolve(result))
-            .catch(error => reject(error))
-    }
+        return new Promise((resolve, reject) => {
+            let statement = "INSERT INTO SuperNodes (FLO_ID, PUB_KEY, URI) VALUES (?, ?, ?)" +
+                " ON DUPLICATE KEY UPDATE URI=?";
+            db.query(statement, [id, pubKey, uri, uri])
+                .then(result => resolve(result))
+                .catch(error => reject(error));
+        });
+    };
 
     db.rmSuperNode = function(id) {
-        let statement = "DELETE FROM SuperNodes" +
-            " WHERE FLO_ID=?";
-        db.query(statement, id)
-            .then(result => resolve(result))
-            .catch(error => reject(error))
-    }
+        return new Promise((resolve, reject) => {
+            let statement = "DELETE FROM SuperNodes" +
+                " WHERE FLO_ID=?";
+            db.query(statement, id)
+                .then(result => resolve(result))
+                .catch(error => reject(error));
+        });
+    };
 
     db.setSubAdmin = function(appName, subAdmins) {
-        let statement = "UPDATE Applications" +
-            " SET SUB_ADMINS=?" +
-            " WHERE APP_NAME=?";
-        db.query(statement, [subAdmins.join(","), appName])
-            .then(result => resolve(result))
-            .catch(error => reject(error))
-    }
+        return new Promise((resolve, reject) => {
+            let statement = "UPDATE Applications" +
+                " SET SUB_ADMINS=?" +
+                " WHERE APP_NAME=?";
+            db.query(statement, [subAdmins.join(","), appName])
+                .then(result => resolve(result))
+                .catch(error => reject(error));
+        });
+    };
 
     db.addApp = function(appName, adminID) {
-        let statement = "INSERT INTO Applications (APP_NAME, ADMIN_ID) VALUES (?, ?)" +
-            " ON DUPLICATE KEY UPDATE ADMIN_ID=?";
-        db.query(statement, [appName, adminID, adminID])
-            .then(result => resolve(result))
-            .catch(error => reject(error))
-    }
+        return new Promise((resolve, reject) => {
+            let statement = "INSERT INTO Applications (APP_NAME, ADMIN_ID) VALUES (?, ?)" +
+                " ON DUPLICATE KEY UPDATE ADMIN_ID=?";
+            db.query(statement, [appName, adminID, adminID])
+                .then(result => resolve(result))
+                .catch(error => reject(error));
+        });
+    };
 
     db.rmApp = function(appName) {
-        let statement = "DELETE FROM Applications" +
-            " WHERE APP_NAME=" + appName;
-        db.query(statement)
-            .then(result => resolve(result))
-            .catch(error => reject(error))
-    }
+        return new Promise((resolve, reject) => {
+            let statement = "DELETE FROM Applications" +
+                " WHERE APP_NAME=" + appName;
+            db.query(statement)
+                .then(result => resolve(result))
+                .catch(error => reject(error));
+        });
+    };
 
     db.getBase = function() {
         return new Promise((resolve, reject) => {
             let tables = Object.keys(Base_Tables);
             Promise.all(tables.forEach(t => db.query("SELECT * FROM " + t))).then(result => {
-                let tmp = Object.fromEntries(tables.map((t, i) => [t, result[i]]))
+                let tmp = Object.fromEntries(tables.map((t, i) => [t, result[i]]));
                 result = {};
                 result.lastTx = Object.fromEntries(tmp.LastTxs.map(a => [a.ID, a.N]));
                 result.sn_config = Object.fromEntries(tmp.Configs.map(a => [a.NAME, a.VAL]));
                 result.appList = Object.fromEntries(tmp.Applications.map(a => [a.APP_NAME, a.ADMIN_ID]));
-                result.appSubAdmins = Object.fromEntries(tmp.Applications.map(a => [a.APP_NAME, a.SUB_ADMINS.split(",")]))
+                result.appSubAdmins = Object.fromEntries(tmp.Applications.map(a => [a.APP_NAME, a.SUB_ADMINS.split(",")]));
                 result.supernodes = Object.fromEntries(tmp.SuperNodes.map(a.FLO_ID, {
                     pubKey: a.PUB_KEY,
                     uri: a.URI
-                }))
-                resolve(result)
-            }).catch(error => reject(error))
-        })
-    }
+                }));
+                resolve(result);
+            }).catch(error => reject(error));
+        });
+    };
 
     db.createTable = function(snID) {
         return new Promise((resolve, reject) => {
@@ -176,18 +186,18 @@ function Database(user, password, dbname, host = 'localhost') {
                 " )";
             db.query(statement)
                 .then(result => resolve(result))
-                .catch(error => reject(error))
-        })
-    }
+                .catch(error => reject(error));
+        });
+    };
 
     db.dropTable = function(snID) {
         return new Promise((resolve, reject) => {
             let statement = "DROP TABLE _" + snID;
             db.query(statement)
                 .then(result => resolve(result))
-                .catch(error => reject(error))
-        })
-    }
+                .catch(error => reject(error));
+        });
+    };
 
     db.addData = function(snID, data) {
         return new Promise((resolve, reject) => {
@@ -196,14 +206,12 @@ function Database(user, password, dbname, host = 'localhost') {
             let statement = "INSERT INTO _" + snID +
                 " (" + attr.join(", ") + ", " + L_struct.STATUS + ", " + L_struct.LOG_TIME + ") " +
                 "VALUES (" + attr.map(a => '?').join(", ") + ", 1, " + Date.now() + ")";
-            data = Object.fromEntries(attr.map((a, i) => [
-                [a, values[i]]
-            ]));
+            data = Object.fromEntries(attr.map((a, i) => [a, values[i]]));
             db.query(statement, values)
                 .then(result => resolve(data))
-                .catch(error => reject(error))
-        })
-    }
+                .catch(error => reject(error));
+        });
+    };
 
     db.tagData = function(snID, vectorClock, tag, tagTime, tagKey, tagSign) {
         return new Promise((resolve, reject) => {
@@ -213,7 +221,7 @@ function Database(user, password, dbname, host = 'localhost') {
                 [T_struct.TAG_KEY]: tagKey,
                 [T_struct.TAG_SIGN]: tagSign,
                 [L_struct.LOG_TIME]: Date.now()
-            }
+            };
             let attr = Object.keys(data);
             let values = attr.map(a => data[a]).concat(vectorClock);
             data[H_struct.VECTOR_CLOCK] = vectorClock; //also add vectorClock to resolve data
@@ -222,9 +230,9 @@ function Database(user, password, dbname, host = 'localhost') {
                 " WHERE " + H_struct.VECTOR_CLOCK + "=?";
             db.query(statement, values)
                 .then(result => resolve(data))
-                .catch(error => reject(error))
-        })
-    }
+                .catch(error => reject(error));
+        });
+    };
 
     db.searchData = function(snID, request) {
         return new Promise((resolve, reject) => {
@@ -233,54 +241,54 @@ function Database(user, password, dbname, host = 'localhost') {
                 if (request.lowerVectorClock && request.upperVectorClock)
                     conditionArr.push(`${H_struct.VECTOR_CLOCK} BETWEEN '${request.lowerVectorClock}' AND '${request.upperVectorClock}'`);
                 else if (request.atKey)
-                    conditionArr.push(`${H_struct.VECTOR_CLOCK} = '${request.atKey}'`)
+                    conditionArr.push(`${H_struct.VECTOR_CLOCK} = '${request.atKey}'`);
                 else if (request.lowerVectorClock)
-                    conditionArr.push(`${H_struct.VECTOR_CLOCK} >= '${request.lowerVectorClock}'`)
+                    conditionArr.push(`${H_struct.VECTOR_CLOCK} >= '${request.lowerVectorClock}'`);
                 else if (request.upperVectorClock)
-                    conditionArr.push(`${H_struct.VECTOR_CLOCK} <= '${request.upperVectorClock}'`)
+                    conditionArr.push(`${H_struct.VECTOR_CLOCK} <= '${request.upperVectorClock}'`);
             }
             conditionArr.push(`${H_struct.APPLICATION} = '${request.application}'`);
             conditionArr.push(`${H_struct.RECEIVER_ID} = '${request.receiverID}'`)
             if (request.comment)
-                conditionArr.push(`${B_struct.COMMENT} = '${request.comment}'`)
+                conditionArr.push(`${B_struct.COMMENT} = '${request.comment}'`);
             if (request.type)
-                conditionArr.push(`${H_struct.TYPE} = '${request.type}'`)
+                conditionArr.push(`${H_struct.TYPE} = '${request.type}'`);
             if (request.senderID) {
                 if (Array.isArray(request.senderID))
                     conditionArr.push(`${H_struct.SENDER_ID} IN ('${request.senderID.join("', '")}')`);
                 else
-                    conditionArr.push(`${H_struct.SENDER_ID} = '${request.senderID}'`)
-            }
+                    conditionArr.push(`${H_struct.SENDER_ID} = '${request.senderID}'`);
+            };
             //console.log(conditionArr);
-            let attr = Object.keys(H_struct).concat(Object.keys(B_struct))
+            let attr = Object.keys(H_struct).concat(Object.keys(B_struct));
             let statement = "SELECT (" + attr.join(", ") + ")" +
                 " FROM _" + snID +
                 " WHERE " + conditionArr.join(" AND ") +
                 request.mostRecent ? "LIMIT 1" : (" ORDER BY " + H_struct.VECTOR_CLOCK);
             db.query(statement)
                 .then(result => resolve(result))
-                .catch(error => reject(error))
-        })
-    }
+                .catch(error => reject(error));
+        });
+    };
 
     db.lastLogTime = function(snID) {
         return new Promise((resolve, reject) => {
             let statement = "SELECT MAX(" + L_struct.LOG_TIME + ") FROM _" + snID;
             db.query(statement)
                 .then(result => resolve(result))
-                .catch(error => reject(error))
-        })
-    }
+                .catch(error => reject(error));
+        });
+    };
 
     db.createGetLastLog = function(snID) {
         return new Promise((resolve, reject) => {
             db.createTable(snID).then(result => {
                 db.lastLogTime(snID)
                     .then(result => resolve(result))
-                    .catch(error => reject(error))
-            }).catch(error => reject(error))
-        })
-    }
+                    .catch(error => reject(error));
+            }).catch(error => reject(error));
+        });
+    };
 
     db.getData = function(snID, logtime) {
         return new Promise((resolve, reject) => {
@@ -289,13 +297,13 @@ function Database(user, password, dbname, host = 'localhost') {
                 " ORDER BY " + L_struct.LOG_TIME;
             db.query(statement)
                 .then(result => resolve(result))
-                .catch(error => reject(error))
-        })
-    }
+                .catch(error => reject(error));
+        });
+    };
 
     db.storeData = function(snID, data) {
         return new Promise((resolve, reject) => {
-            let u_attr = Object.keys(B_struct).map(a => B_struct[a])
+            let u_attr = Object.keys(B_struct).map(a => B_struct[a]);
             let attr = Object.keys(H_struct).map(a => H_struct[a]).concat(u_attr);
             let values = attr.map(a => data[a]);
             let u_values = u_attr.map(a => data[a]);
@@ -305,9 +313,9 @@ function Database(user, password, dbname, host = 'localhost') {
                 "ON DUPLICATE KEY UPDATE " + u_attr.map(a => a + "=?").join(", ");
             db.query(statement, values.concat(u_values))
                 .then(result => resolve(data))
-                .catch(error => reject(error))
-        })
-    }
+                .catch(error => reject(error));
+        });
+    };
 
     db.storeTag = function(snID, data) {
         return new Promise((resolve, reject) => {
@@ -318,9 +326,9 @@ function Database(user, password, dbname, host = 'localhost') {
                 " WHERE " + H_struct.VECTOR_CLOCK + "=" + data[H_struct.VECTOR_CLOCK];
             db.query(statement, values)
                 .then(result => resolve(data))
-                .catch(error => reject(error))
-        })
-    }
+                .catch(error => reject(error));
+        });
+    };
 
     db.clearAuthorisedAppData = function(snID, app, adminID, subAdmins, timestamp) {
         return new Promise((resolve, reject) => {
@@ -332,9 +340,9 @@ function Database(user, password, dbname, host = 'localhost') {
                 H_struct.SENDER_ID + " NOT IN (" + subAdmins.map(a => "?").join(", ") + ") )";
             db.query(statement, [timestamp, app].concat(subAdmins).push(adminID))
                 .then(result => resolve(result))
-                .catch(error => reject(error))
-        })
-    }
+                .catch(error => reject(error));
+        });
+    };
 
     db.clearUnauthorisedAppData = function(snID, appList, timestamp) {
         return new Promise((resolve, reject) => {
@@ -343,13 +351,13 @@ function Database(user, password, dbname, host = 'localhost') {
                 H_struct.APPLICATION + " NOT IN (" + appList.map(a => "?").join(", ") + ")";
             db.query(statement, [timestamp].concat(appList))
                 .then(result => resolve(result))
-                .catch(error => reject(error))
-        })
-    }
+                .catch(error => reject(error));
+        });
+    };
 
     db.close = function() {
         db.conn.end();
-    }
+    };
 
     return new Promise((resolve, reject) => {
         let conn = mysql.createConnection({
@@ -361,9 +369,9 @@ function Database(user, password, dbname, host = 'localhost') {
         conn.connect((err) => {
             if (err) return reject(err);
             db.conn = conn;
-            resolve(db)
+            resolve(db);
         });
-    })
-}
+    });
+};
 
 module.exports = Database;

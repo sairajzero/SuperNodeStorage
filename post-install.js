@@ -8,4 +8,4 @@ To complete the setup:
 To start the node, Run: 
 npm start
 `;
-console.log(message)
+console.log(message);

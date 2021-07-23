@@ -1,5 +1,6 @@
 const http = require('http');
 const WebSocket = require('ws');
+const url = require('url');
 
 module.exports = function Server(port, client, intra) {
 
@@ -7,21 +8,18 @@ module.exports = function Server(port, client, intra) {
 
     const server = http.createServer((req, res) => {
         if (req.method === "GET") {
-            //GET request (requesting data)
-            req.on('end', () => {
-                let i = req.url.indexOf("?");
-                if (i !== -1) {
-                    var request = JSON.parse(req.url.substring(i));
-                    client.processRequestFromUser(request)
-                        .then(result => res.end(JSON.parse(result[0])))
-                        .catch(error => res.end(error.toString()));
-                };
-            });
+            //GET: requesting data
+            let u = url.parse(req.url, true);
+            if (!u.search)
+                return res.end("");
+            client.processRequestFromUser(u.query)
+                .then(result => res.end(JSON.parse(result[0])))
+                .catch(error => res.end(error.toString()));
         } else if (req.method === "POST") {
+            //POST: All data processing (required JSON input)
             let data = '';
             req.on('data', chunk => data += chunk);
             req.on('end', () => {
-                console.log(data);
                 //process the data storing
                 client.processIncomingData(data).then(result => {
                     res.end(result[0]);
@@ -61,6 +59,13 @@ module.exports = function Server(port, client, intra) {
             };
         };
     });
+
+    function sendToLiveRequests(data) {
+        wsServer.clients.forEach(ws => {
+            if (client.checkIfRequestSatisfy(ws._liveReq, data))
+                ws.send(data);
+        });
+    };
 
     Object.defineProperty(this, "http", {
         get: () => server

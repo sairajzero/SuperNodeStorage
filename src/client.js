@@ -18,7 +18,7 @@ function processIncomingData(data) {
             else if (data.message) //Store data
                 process = processDataFromUser(data);
             else if (data) //Tag data
-                process = processTagFromUser(gid, uid, data);
+                process = processTagFromUser(data);
             /*
             else if (data.edit)
                 return processEditFromUser(gid, uid, data);
@@ -27,8 +27,13 @@ function processIncomingData(data) {
             */
             else
                 return reject("Invalid Data-format");
-            process.then(result => resolve(result))
-                .catch(error => reject(error));
+            process.then(result => {
+                console.log(result);
+                resolve(result);
+            }).catch(error => {
+                console.error(error);
+                reject(error);
+            });
         };
     });
 };

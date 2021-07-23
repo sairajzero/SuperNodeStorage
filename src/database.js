@@ -57,6 +57,7 @@ const T_struct = {
 function Database(user, password, dbname, host = 'localhost') {
     const db = {};
     db.query = (s, v) => new Promise((res, rej) => {
+        //console.log("\nSQL:",s, v);
         const fn = ((e, r) => e ? rej(e) : res(r));
         v ? db.conn.query(s, v, fn) : db.conn.query(s, fn);
     });
@@ -172,14 +173,14 @@ function Database(user, password, dbname, host = 'localhost') {
                 H_struct.APPLICATION + " TINYTEXT NOT NULL, " +
                 H_struct.TYPE + " TINYTEXT, " +
                 B_struct.MESSAGE + " TEXT NOT NULL, " +
-                B_struct.TIME + " INT NOT NULL, " +
+                H_struct.TIME + " BIGINT NOT NULL, " +
                 B_struct.SIGNATURE + " VARCHAR(160) NOT NULL, " +
-                B_struct.PUB_KEY + " CHAR(66) NOT NULL, " +
+                H_struct.PUB_KEY + " CHAR(66) NOT NULL, " +
                 B_struct.COMMENT + " TINYTEXT, " +
                 L_struct.STATUS + " INT NOT NULL, " +
-                L_struct.LOG_TIME + " INT NOT NULL, " +
+                L_struct.LOG_TIME + " BIGINT NOT NULL, " +
                 T_struct.TAG + " TINYTEXT, " +
-                T_struct.TAG_TIME + " INT, " +
+                T_struct.TAG_TIME + " BIGINT, " +
                 T_struct.TAG_KEY + " CHAR(66), " +
                 T_struct.TAG_SIGN + " VARCHAR(160), " +
                 "PRIMARY KEY (" + H_struct.VECTOR_CLOCK + ")" +
@@ -201,7 +202,7 @@ function Database(user, password, dbname, host = 'localhost') {
 
     db.addData = function(snID, data) {
         return new Promise((resolve, reject) => {
-            let attr = Object.keys(H_struct).map(a => H_struct[a]);
+            let attr = Object.keys(H_struct).map(a => H_struct[a]).concat(Object.keys(B_struct).map(a => B_struct[a]));
             let values = attr.map(a => data[a]);
             let statement = "INSERT INTO _" + snID +
                 " (" + attr.join(", ") + ", " + L_struct.STATUS + ", " + L_struct.LOG_TIME + ") " +
@@ -260,11 +261,11 @@ function Database(user, password, dbname, host = 'localhost') {
                     conditionArr.push(`${H_struct.SENDER_ID} = '${request.senderID}'`);
             };
             //console.log(conditionArr);
-            let attr = Object.keys(H_struct).concat(Object.keys(B_struct));
-            let statement = "SELECT (" + attr.join(", ") + ")" +
+            let attr = Object.keys(H_struct).map(a => H_struct[a]).concat(Object.keys(B_struct).map(a => B_struct[a]));
+            let statement = "SELECT " + attr.join(", ") +
                 " FROM _" + snID +
                 " WHERE " + conditionArr.join(" AND ") +
-                request.mostRecent ? "LIMIT 1" : (" ORDER BY " + H_struct.VECTOR_CLOCK);
+                (request.mostRecent ? " LIMIT 1" : (" ORDER BY " + H_struct.VECTOR_CLOCK));
             db.query(statement)
                 .then(result => resolve(result))
                 .catch(error => reject(error));

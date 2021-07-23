@@ -12,7 +12,7 @@ module.exports = function Server(port, client, intra) {
             let u = url.parse(req.url, true);
             if (!u.search)
                 return res.end("");
-            console.log(u.search);
+            console.log("GET:", u.search);
             client.processRequestFromUser(u.query)
                 .then(result => res.end(JSON.stringify(result[0])))
                 .catch(error => res.end(error.toString()));
@@ -21,7 +21,7 @@ module.exports = function Server(port, client, intra) {
             let data = '';
             req.on('data', chunk => data += chunk);
             req.on('end', () => {
-                console.log(data);
+                console.log("POST:", data);
                 //process the data storing
                 client.processIncomingData(data).then(result => {
                     res.end(JSON.stringify(result[0]));

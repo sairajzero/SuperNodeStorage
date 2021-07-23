@@ -180,7 +180,7 @@ function connectToActiveNode(snID, reverse = false) {
 //Connect to next available node
 function connectToNextNode() {
     return new Promise((resolve, reject) => {
-        let nextNodeID = kBucket.nextNode(nodeID);
+        let nextNodeID = kBucket.nextNode(myFloID);
         connectToActiveNode(nextNodeID).then(ws => {
             _nextNode.set(nextNodeID, ws);
             _nextNode.send(packet_.constuct({
@@ -410,12 +410,13 @@ function handshakeEnd() {
 
 //Reconnect to next available node
 function reconnectNextNode() {
-    _nextNode.close();
+    if(_nextNode.ws)
+        _nextNode.close();
     connectToNextNode()
         .then(result => console.log(result))
         .catch(error => {
             //Case: No other node is online
-            console.error(error);
+            console.info("No other node online");
             //Serve all nodes
             for (let sn in floGlobals.supernodes)
                 DB.createTable(sn)

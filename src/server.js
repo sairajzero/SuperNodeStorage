@@ -7,6 +7,7 @@ module.exports = function Server(port, client, intra) {
     var refresher; //container for refresher
 
     const server = http.createServer((req, res) => {
+        res.setHeader("Access-Control-Allow-Origin", "*");
         if (req.method === "GET") {
             //GET: requesting data
             let u = url.parse(req.url, true);

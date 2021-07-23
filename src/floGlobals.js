@@ -27,4 +27,4 @@ const floGlobals = {
 };
 
 (typeof global !== "undefined" ? global : window).cryptocoin = floGlobals.blockchain;
-('object' === typeof module) ? module.export = floGlobals : null;
+('object' === typeof module) ? module.exports = floGlobals : null;

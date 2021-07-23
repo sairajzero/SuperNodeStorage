@@ -41,7 +41,7 @@
         //Promised function to get data from API
         promisedAPI: function(apicall) {
             return new Promise((resolve, reject) => {
-                console.log(apicall);
+                //console.log(apicall);
                 this.util.fetch_api(apicall)
                     .then(result => resolve(result))
                     .catch(error => reject(error));
@@ -389,7 +389,7 @@
                             if (options.limit <= 0)
                                 options.limit = response.items.length;
                             var filteredData = [];
-                            for (i = 0; i < (response.totalItems - options.ignoreOld) &&
+                            for (let i = 0; i < (response.totalItems - options.ignoreOld) &&
                                 filteredData.length < options.limit; i++) {
                                 if (options.sentOnly && response.items[i].vin[0].addr !== addr)
                                     continue;

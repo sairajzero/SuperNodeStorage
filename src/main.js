@@ -27,6 +27,7 @@ function startNode() {
         client.DB = DB;
         client._list = intra._list;
         loadBase().then(base => {
+            console.log("Load Database successful");
             //Set base data from DB to floGlobals
             floGlobals.supernodes = base.supernodes;
             floGlobals.sn_config = base.sn_config;
@@ -38,11 +39,11 @@ function startNode() {
             const server = new Server(config["port"], client, intra);
             server.refresher = refreshData;
             intra.refresher = refreshData;
-        }).catch(error => reject(error));
-    }).catch(error => reject(error));
+        }).catch(error => console.error(error));
+    }).catch(error => console.error(error));
 };
 
-function loadBase(DB) {
+function loadBase() {
     return new Promise((resolve, reject) => {
         DB.createBase().then(result => {
             DB.getBase(DB)
@@ -57,11 +58,13 @@ const refreshData = {
     base: null,
     invoke(flag = true) {
         this.count = floGlobals.sn_config.refreshDelay;
+        console.info("Refresher processor has started at " + Date());
         refreshBlockchainData(this.base, flag).then(result => {
             console.log(result);
             diskCleanUp(this.base)
-                .then(result => console.info(result))
-                .catch(warn => console.warn(warn));
+                .then(result => console.log(result))
+                .catch(warn => console.warn(warn))
+                .finally(_ => console.info("Refresher processor has finished at " + Date()));
         }).catch(error => console.error(error));
     },
     get countdown() {
@@ -76,7 +79,7 @@ function refreshBlockchainData(base, flag) {
         readSupernodeConfigFromAPI(base, flag).then(result => {
             console.log(result);
             kBucket.launch().then(result => {
-                console.log(result);
+                //console.log(result);
                 readAppSubAdminListFromAPI(base)
                     .then(result => console.log(result))
                     .catch(warn => console.warn(warn))
@@ -139,11 +142,9 @@ function readSupernodeConfigFromAPI(base, flag) {
             Promise.allSettled(promises).then(results => {
                 if (results.reduce((a, r) => r.status === "rejected" ? ++a : a, 0))
                     console.warn("Some data might not have been saved in database correctly");
-                else
-                    console.log("All data are saved in database");
             });
             //Process data migration if nodes are changed
-            if (Object.keys(node_change))
+            if (Object.keys(node_change).length)
                 intra.dataMigration(node_change, flag);
             resolve('Updated Supernode Configuration');
         }).catch(error => reject(error));

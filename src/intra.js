@@ -460,13 +460,13 @@ function sendStoredData(lastlogs, node) {
                     id: n,
                     status: true
                 }));
-                console.info(`START: ${snID} data sync(send) to ${node.id}`);
+                console.log(`START: ${snID} data sync(send) to ${node.id}`);
                 //TODO: efficiently handle large number of data instead of loading all into memory
                 result.forEach(d => node.send(packet_.constuct({
                     type: STORE_BACKUP_DATA,
                     data: d
                 })));
-                console.info(`END: ${snID} data sync(send) to ${node.id}`);
+                console.log(`END: ${snID} data sync(send) to ${node.id}`);
                 node.send(packet_.constuct({
                     type: DATA_SYNC,
                     id: n,
@@ -479,7 +479,7 @@ function sendStoredData(lastlogs, node) {
 
 //Indicate sync of data
 function dataSyncIndication(snID, status, from) {
-    console.info(`${status ? 'START':'END'}: ${snID} data sync(receive) form ${from}`);
+    console.log(`${status ? 'START':'END'}: ${snID} data sync(receive) form ${from}`);
 };
 
 //Store (backup) data
@@ -543,7 +543,7 @@ function forwardToNextNode(mode, data) {
 
 //Data migration processor
 function dataMigration(node_change, flag) {
-    if (!Object.keys(node_change))
+    if (!Object.keys(node_change).length)
         return;
     console.log("Node list changed! Data migration required");
     if (flag) dataMigration.intimateAllNodes(); //Initmate All nodes to call refresher
@@ -581,7 +581,7 @@ dataMigration.process_del = async function(del_nodes) {
             let remaining = process_nodes.length;
             process_nodes.forEach(n => {
                 DB.getData(n, 0).then(result => {
-                    console.info(`START: Data migration for ${n}`);
+                    console.log(`START: Data migration for ${n}`);
                     //TODO: efficiently handle large number of data instead of loading all into memory
                     result.forEach(d => {
                         let closest = kBucket.closestNode(d.receiverID);
@@ -597,7 +597,7 @@ dataMigration.process_del = async function(del_nodes) {
                                 data: d
                             }));
                     });
-                    console.info(`END: Data migration for ${n}`);
+                    console.log(`END: Data migration for ${n}`);
                     _list.delete(n);
                     DB.dropTable(n);
                     remaining--;

@@ -21,7 +21,7 @@ const Base_Tables = {
     Applications: {
         APP_NAME: "VARCHAR(64) NOT NULL",
         ADMIN_ID: "CHAR(34) NOT NULL",
-        SUB_ADMINS: "VARCHAR(MAX)",
+        SUB_ADMINS: "VARCHAR(3500)",
         PRIMARY: "KEY (APP_NAME)"
     }
 };
@@ -67,7 +67,7 @@ function Database(user, password, dbname, host = 'localhost') {
             for (let t in Base_Tables)
                 statements.push("CREATE TABLE IF NOT EXISTS " + t + "( " +
                     Object.keys(Base_Tables[t]).map(a => a + " " + Base_Tables[t][a]).join(", ") + " )");
-            Promise.all(statements.forEach(s => db.query(s)))
+            Promise.all(statements.map(s => db.query(s)))
                 .then(result => resolve(result))
                 .catch(error => reject(error));
         });
@@ -147,17 +147,17 @@ function Database(user, password, dbname, host = 'localhost') {
     db.getBase = function() {
         return new Promise((resolve, reject) => {
             let tables = Object.keys(Base_Tables);
-            Promise.all(tables.forEach(t => db.query("SELECT * FROM " + t))).then(result => {
+            Promise.all(tables.map(t => db.query("SELECT * FROM " + t))).then(result => {
                 let tmp = Object.fromEntries(tables.map((t, i) => [t, result[i]]));
                 result = {};
                 result.lastTx = Object.fromEntries(tmp.LastTxs.map(a => [a.ID, a.N]));
                 result.sn_config = Object.fromEntries(tmp.Configs.map(a => [a.NAME, a.VAL]));
                 result.appList = Object.fromEntries(tmp.Applications.map(a => [a.APP_NAME, a.ADMIN_ID]));
                 result.appSubAdmins = Object.fromEntries(tmp.Applications.map(a => [a.APP_NAME, a.SUB_ADMINS.split(",")]));
-                result.supernodes = Object.fromEntries(tmp.SuperNodes.map(a.FLO_ID, {
+                result.supernodes = Object.fromEntries(tmp.SuperNodes.map(a => [a.FLO_ID, {
                     pubKey: a.PUB_KEY,
                     uri: a.URI
-                }));
+                }]));
                 resolve(result);
             }).catch(error => reject(error));
         });
@@ -166,19 +166,19 @@ function Database(user, password, dbname, host = 'localhost') {
     db.createTable = function(snID) {
         return new Promise((resolve, reject) => {
             let statement = "CREATE TABLE IF NOT EXISTS _" + snID + " ( " +
-                H_struct.VECTOR_CLOCK + " VARCHAR(50) NOT NULL, " +
+                H_struct.VECTOR_CLOCK + " VARCHAR(52) NOT NULL, " +
                 H_struct.SENDER_ID + " CHAR(34) NOT NULL, " +
                 H_struct.RECEIVER_ID + " CHAR(34) NOT NULL, " +
-                H_struct.APPLICATION + " VARCHAR(128) NOT NULL, " +
-                H_struct.TYPE + " VARCHAR(1024), " +
+                H_struct.APPLICATION + " TINYTEXT NOT NULL, " +
+                H_struct.TYPE + " TINYTEXT, " +
                 B_struct.MESSAGE + " TEXT NOT NULL, " +
                 B_struct.TIME + " INT NOT NULL, " +
                 B_struct.SIGNATURE + " VARCHAR(160) NOT NULL, " +
                 B_struct.PUB_KEY + " CHAR(66) NOT NULL, " +
-                B_struct.COMMENT + " VARCHAR(1024), " +
+                B_struct.COMMENT + " TINYTEXT, " +
                 L_struct.STATUS + " INT NOT NULL, " +
                 L_struct.LOG_TIME + " INT NOT NULL, " +
-                T_struct.TAG + " VARCHAR (1024), " +
+                T_struct.TAG + " TINYTEXT, " +
                 T_struct.TAG_TIME + " INT, " +
                 T_struct.TAG_KEY + " CHAR(66), " +
                 T_struct.TAG_SIGN + " VARCHAR(160), " +

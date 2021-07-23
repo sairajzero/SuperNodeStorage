@@ -1,5 +1,5 @@
 'use strict';
-require('./lib/BuildKBucket')
+require('./lib/BuildKBucket');
 (function(GLOBAL) {
     var kBucket = GLOBAL.kBucket = {};
     var SNKB, SNCO;
@@ -26,7 +26,7 @@ require('./lib/BuildKBucket')
         });
         list.forEach(id => KB.add({
             id: decodeID(id),
-            floID: floID
+            floID: id
         }));
         return KB;
     };

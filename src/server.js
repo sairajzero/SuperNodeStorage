@@ -12,17 +12,19 @@ module.exports = function Server(port, client, intra) {
             let u = url.parse(req.url, true);
             if (!u.search)
                 return res.end("");
+            console.log(u.search);
             client.processRequestFromUser(u.query)
-                .then(result => res.end(JSON.parse(result[0])))
+                .then(result => res.end(JSON.stringify(result[0])))
                 .catch(error => res.end(error.toString()));
         } else if (req.method === "POST") {
             //POST: All data processing (required JSON input)
             let data = '';
             req.on('data', chunk => data += chunk);
             req.on('end', () => {
+                console.log(data);
                 //process the data storing
                 client.processIncomingData(data).then(result => {
-                    res.end(result[0]);
+                    res.end(JSON.stringify(result[0]));
                     if (result[1]) {
                         refresher.countdown;
                         if (result[1] === 'DATA')
@@ -48,9 +50,9 @@ module.exports = function Server(port, client, intra) {
                 intra.processTaskFromSupernode(message, ws);
             else {
                 var request = JSON.parse(message);
-                client.processRequestFromUser(JSON.parse(message))
+                client.processRequestFromUser(request)
                     .then(result => {
-                        ws.send(JSON.parse(result[0]));
+                        ws.send(JSON.stringify(result[0]));
                         ws._liveReq = request;
                     }).catch(error => {
                         if (floGlobals.sn_config.errorFeedback)
@@ -63,7 +65,7 @@ module.exports = function Server(port, client, intra) {
     function sendToLiveRequests(data) {
         wsServer.clients.forEach(ws => {
             if (client.checkIfRequestSatisfy(ws._liveReq, data))
-                ws.send(data);
+                ws.send(JSON.stringify(data));
         });
     };
 

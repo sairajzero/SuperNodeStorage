@@ -525,7 +525,7 @@ function deleteMigratedData(old_sn, vectorClock, receiverID, from, packet) {
 };
 
 function initiateRefresh() {
-    refresher.invoke(false);
+    refresher.invoke(false).then(_ => null).catch(_ => null);
 };
 
 //Forward incoming to next node
@@ -682,6 +682,7 @@ dataMigration.intimateAllNodes = function() {
 
 //-----EXPORTS-----
 module.exports = {
+    reconnectNextNode,
     processTaskFromSupernode,
     forwardToNextNode,
     dataMigration,

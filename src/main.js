@@ -34,7 +34,8 @@ function startNode() {
             floGlobals.appList = base.appList;
             floGlobals.appSubAdmins = base.appSubAdmins;
             refreshData.base = base;
-            refreshData.invoke();
+            refreshData.invoke()
+                .then(_ => intra.reconnectNextNode()).catch(_ => null)
             //Start Server
             const server = new Server(config["port"], client, intra);
             server.refresher = refreshData;
@@ -57,20 +58,28 @@ const refreshData = {
     count: null,
     base: null,
     invoke(flag = true) {
-        this.count = floGlobals.sn_config.refreshDelay;
-        console.info("Refresher processor has started at " + Date());
-        refreshBlockchainData(this.base, flag).then(result => {
-            console.log(result);
-            diskCleanUp(this.base)
-                .then(result => console.log(result))
-                .catch(warn => console.warn(warn))
-                .finally(_ => console.info("Refresher processor has finished at " + Date()));
-        }).catch(error => console.error(error));
+        return new Promise((resolve, reject) => {
+            this.count = floGlobals.sn_config.refreshDelay;
+            console.info("Refresher processor has started at " + Date());
+            refreshBlockchainData(this.base, flag).then(result => {
+                console.log(result);
+                diskCleanUp(this.base)
+                    .then(result => console.log(result))
+                    .catch(warn => console.warn(warn))
+                    .finally(_ => {
+                        console.info("Refresher processor has finished at " + Date());
+                        resolve(true);
+                    });
+            }).catch(error => {
+                console.error(error);
+                reject(false);
+            });
+        });
     },
     get countdown() {
         this.count--;
         if (this.count <= 0)
-            this.invoke();
+            this.invoke().then(_ => null).catch(_ => null);
     }
 };
 

@@ -56,11 +56,6 @@ const T_struct = {
 
 function Database(user, password, dbname, host = 'localhost') {
     const db = {};
-    db.query = (s, v) => new Promise((res, rej) => {
-        //console.log("\nSQL:",s, v);
-        const fn = ((e, r) => e ? rej(e) : res(r));
-        v ? db.conn.query(s, v, fn) : db.conn.query(s, fn);
-    });
 
     db.createBase = function() {
         return new Promise((resolve, reject) => {
@@ -274,9 +269,10 @@ function Database(user, password, dbname, host = 'localhost') {
 
     db.lastLogTime = function(snID) {
         return new Promise((resolve, reject) => {
-            let statement = "SELECT MAX(" + L_struct.LOG_TIME + ") FROM _" + snID;
+            let attr = "MAX(" + L_struct.LOG_TIME + ")";
+            let statement = "SELECT " + attr + " FROM _" + snID;
             db.query(statement)
-                .then(result => resolve(result))
+                .then(result => resolve(result[0][attr] || 0))
                 .catch(error => reject(error));
         });
     };
@@ -356,22 +352,43 @@ function Database(user, password, dbname, host = 'localhost') {
         });
     };
 
-    db.close = function() {
-        db.conn.end();
-    };
+    Object.defineProperty(db, "connect", {
+        get: () => new Promise((resolve, reject) => {
+            db.pool.getConnection((error, conn) => {
+                if (error)
+                    reject(error);
+                else
+                    resolve(conn);
+            });
+        })
+    });
+
+    Object.defineProperty(db, "query", {
+        value: (sql, values) => new Promise((resolve, reject) => {
+            db.connect.then(conn => {
+                const fn = (err, res) => {
+                    conn.release();
+                    (err ? reject(err) : resolve(res));
+                };
+                if (values)
+                    conn.query(sql, values, fn);
+                else
+                    conn.query(sql, fn);
+            }).catch(error => reject(error));
+        })
+    });
 
     return new Promise((resolve, reject) => {
-        let conn = mysql.createConnection({
+        db.pool = mysql.createPool({
             host: host,
             user: user,
             password: password,
             database: dbname
         });
-        conn.connect((err) => {
-            if (err) return reject(err);
-            db.conn = conn;
+        db.connect.then(conn => {
+            conn.release();
             resolve(db);
-        });
+        }).catch(error => reject(error));
     });
 };
 

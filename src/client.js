@@ -28,10 +28,10 @@ function processIncomingData(data) {
             else
                 return reject("Invalid Data-format");
             process.then(result => {
-                console.log(result);
+                console.debug(result);
                 resolve(result);
             }).catch(error => {
-                console.error(error);
+                console.debug(error);
                 reject(error);
             });
         };

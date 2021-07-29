@@ -290,7 +290,7 @@ function Database(user, password, dbname, host = 'localhost') {
     db.getData = function(snID, logtime) {
         return new Promise((resolve, reject) => {
             let statement = "SELECT * FROM _" + snID +
-                " WHERE " + L_struct.LOG_TIME + ">=" + logtime +
+                " WHERE " + L_struct.LOG_TIME + ">" + logtime +
                 " ORDER BY " + L_struct.LOG_TIME;
             db.query(statement)
                 .then(result => resolve(result))

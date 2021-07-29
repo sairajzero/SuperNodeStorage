@@ -51,15 +51,21 @@ module.exports = function Server(port, client, intra) {
                 intra.processTaskFromSupernode(message, ws);
             else {
                 console.debug("WS: ", message);
-                var request = JSON.parse(message);
-                client.processRequestFromUser(request)
-                    .then(result => {
-                        ws.send(JSON.stringify(result[0]));
-                        ws._liveReq = request;
-                    }).catch(error => {
-                        if (floGlobals.sn_config.errorFeedback)
-                            ws.send(error.toString());
-                    });
+                try {
+                    var request = JSON.parse(message);
+                    client.processRequestFromUser(request)
+                        .then(result => {
+                            ws.send(JSON.stringify(result[0]));
+                            ws._liveReq = request;
+                        }).catch(error => {
+                            if (floGlobals.sn_config.errorFeedback)
+                                ws.send(error.toString());
+                        });
+                } catch (error) {
+                    console.error(error);
+                    if (floGlobals.sn_config.errorFeedback)
+                        ws.send("Request not in JSON format");
+                };
             };
         };
     });

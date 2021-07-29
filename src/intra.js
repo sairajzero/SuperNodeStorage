@@ -136,14 +136,19 @@ packet_.constuct = function(message) {
 };
 packet_.s = d => [JSON.stringify(d.message), d.time].join("|");
 packet_.parse = function(str) {
-    let packet = JSON.parse(str.substring(SUPERNODE_INDICATOR.length));
-    let curTime = Date.now();
-    if (packet.time > curTime - floGlobals.sn_config.delayDelta &&
-        packet.from in floGlobals.supernodes &&
-        floCrypto.verifySign(this.s(packet), packet.sign, floGlobals.supernodes[packet.from].pubKey)) {
-        if (!Array.isArray(packet.message))
-            packet.message = [packet.message];
-        return packet;
+    try {
+        let packet = JSON.parse(str.substring(SUPERNODE_INDICATOR.length));
+        let curTime = Date.now();
+        if (packet.time > curTime - floGlobals.sn_config.delayDelta &&
+            packet.from in floGlobals.supernodes &&
+            floCrypto.verifySign(this.s(packet), packet.sign, floGlobals.supernodes[packet.from].pubKey)) {
+            if (!Array.isArray(packet.message))
+                packet.message = [packet.message];
+            return packet;
+        };
+    } catch (error) {
+        console.error(str, error);
+        return false;
     };
 };
 
@@ -416,7 +421,7 @@ function handshakeEnd() {
 
 //Reconnect to next available node
 function reconnectNextNode() {
-    if (_nextNode.ws)
+    if (_nextNode.id)
         _nextNode.close();
     connectToNextNode()
         .then(result => console.log(result))

@@ -22,7 +22,11 @@ npm install
 ### Configuration
 
 #### General Configuration
-Copy `config-sample.json` to `config.json` and Edit the values as required.
+In `args/` directory, Copy `config-sample.json` to `config.json`.
+```
+cp args/config-sample.json args/config.json
+```
+Edit the values in `args/config.json` as required.
 ```
 {
 "privateKey": "<private-key>",
@@ -43,10 +47,10 @@ Copy `config-sample.json` to `config.json` and Edit the values as required.
 
 ***Recommended*** *(optional)* Create and use a MySQL user instead of root. Remember to give access to the database to the user.
 
-#### Parameter Generation
-Open `gen-param.html` in a browser and download `param.json` to `SuperNodeStorage` directory.
+#### Parameter Generation *(Optional)*
+Open `args/gen-param.html` in a browser and download `param.json` to `SuperNodeStorage/args` directory.
 
-*Note: param.json is used for controlled random values used by SecureRandom in Cryptography*
+*Note: `param.json` is used for controlled random values used by SecureRandom in Cryptography. If this step is skipped, `param-default.json` will be used as default parameter*
 
 ## Starting the Server
 After successful installation and configuration using the above steps, SuperNodeStorage can be started using:

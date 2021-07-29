@@ -1,4 +1,4 @@
-const config = require("../config.json");
+const config = require('../args/config.json');
 global.floGlobals = require("./floGlobals");
 require('./set_globals');
 require('./lib');

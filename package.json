@@ -10,8 +10,8 @@
     },
     "devDependencies": {},
     "scripts": {
-        "postinstall": "node post-install.js",
-        "start": "node launch.js"
+        "postinstall": "node args/post-install.js",
+        "start": "node start.js"
     },
     "repository": {
         "type": "git",

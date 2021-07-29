@@ -125,7 +125,7 @@ _prevNode.onclose = evt => _prevNode.close();
 
 //Packet processing
 const packet_ = {};
-packet_.constuct = function(message) {
+packet_.construct = function(message) {
     const packet = {
         from: myFloID,
         message: message,
@@ -189,7 +189,7 @@ function connectToNextNode() {
         let nextNodeID = kBucket.nextNode(myFloID);
         connectToActiveNode(nextNodeID).then(ws => {
             _nextNode.set(nextNodeID, ws);
-            _nextNode.send(packet_.constuct({
+            _nextNode.send(packet_.construct({
                 type: BACKUP_HANDSHAKE_INIT
             }));
             resolve("BACKUP_HANDSHAKE_INIT: " + nextNodeID);
@@ -247,7 +247,7 @@ function processTaskFromNextNode(packet) {
                     dataSyncIndication(task.id, task.status, from);
                     break;
                 case STORE_BACKUP_DATA:
-                    storeBackupData(task.data);
+                    storeBackupData(task.data, from, packet);
                     break;
                 default:
                     console.log("Invalid task type:" + task.type + "from next-node");
@@ -324,18 +324,18 @@ function handshakeMid(id, ws) {
     if (_prevNode.id && _prevNode.id in floGlobals.supernodes) {
         if (kBucket.innerNodes(_prevNode.id, myFloID).includes(id)) {
             //close existing prev-node connection
-            _prevNode.send(packet_.constuct({
+            _prevNode.send(packet_.construct({
                 type: RECONNECT_NEXT_NODE
             }));
             _prevNode.close();
             //set the new prev-node connection
             _prevNode.set(id, ws);
-            _prevNode.send(packet_.constuct({
+            _prevNode.send(packet_.construct({
                 type: BACKUP_HANDSHAKE_END
             }));
         } else {
             //Incorrect order, existing prev-node is already after the incoming node
-            ws.send(packet_.constuct({
+            ws.send(packet_.construct({
                 type: RECONNECT_NEXT_NODE
             }));
             return;
@@ -343,7 +343,7 @@ function handshakeMid(id, ws) {
     } else {
         //set the new prev-node connection
         _prevNode.set(id, ws);
-        _prevNode.send(packet_.constuct({
+        _prevNode.send(packet_.construct({
             type: BACKUP_HANDSHAKE_END
         }));
     };
@@ -404,7 +404,7 @@ handshakeMid.requestData = function(req_sync, new_order) {
                 type: ORDER_BACKUP,
                 order: _list.get(order)
             });
-        _nextNode.send(packet_.constuct(tasks));
+        _nextNode.send(packet_.construct(tasks));
         if (failed.length)
             handshakeMid.timeout = setTimeout(_ => handshakeMid.requestData(failed, failed_order), RETRY_TIMEOUT);
     });
@@ -413,7 +413,7 @@ handshakeMid.requestData = function(req_sync, new_order) {
 //Complete handshake
 function handshakeEnd() {
     console.log("Backup connected: " + _nextNode.id);
-    _nextNode.send(packet_.constuct({
+    _nextNode.send(packet_.construct({
         type: ORDER_BACKUP,
         order: _list.get()
     }));
@@ -478,7 +478,7 @@ orderBackup.requestData = function(req_sync, new_order) {
                 failed.push(s);
         });
         if (Object.keys(lastlogs).length)
-            _prevNode.send(packet_.constuct({
+            _prevNode.send(packet_.construct({
                 type: DATA_REQUEST,
                 nodes: lastlogs
             }));
@@ -489,7 +489,7 @@ orderBackup.requestData = function(req_sync, new_order) {
                 order.push(n);
         });
         if (order.length) //TODO: maybe should wait for sync to finish?
-            _nextNode.send(packet_.constuct({
+            _nextNode.send(packet_.construct({
                 type: ORDER_BACKUP,
                 order: _list.get(order)
             }));
@@ -503,19 +503,19 @@ function sendStoredData(lastlogs, node) {
     for (let n in lastlogs) {
         if (_list.stored.includes(n)) {
             DB.getData(n, lastlogs[n]).then(result => {
-                node.send(packet_.constuct({
+                node.send(packet_.construct({
                     type: DATA_SYNC,
                     id: n,
                     status: true
                 }));
                 console.log(`START: ${n} data sync(send) to ${node.id}`);
                 //TODO: efficiently handle large number of data instead of loading all into memory
-                result.forEach(d => node.send(packet_.constuct({
+                result.forEach(d => node.send(packet_.construct({
                     type: STORE_BACKUP_DATA,
                     data: d
                 })));
                 console.log(`END: ${n} data sync(send) to ${node.id}`);
-                node.send(packet_.constuct({
+                node.send(packet_.construct({
                     type: DATA_SYNC,
                     id: n,
                     status: false
@@ -555,7 +555,7 @@ function storeMigratedData(data) {
     let closestNode = kBucket.closestNode(data.receiverID);
     if (_list.serving.includes(closestNode)) {
         DB.storeData(closestNode, data);
-        _nextNode.send(packet_.constuct({
+        _nextNode.send(packet_.construct({
             type: STORE_BACKUP_DATA,
             data: data
         }));
@@ -563,11 +563,11 @@ function storeMigratedData(data) {
 };
 
 //Delete (migrated) data
-function deleteMigratedData(old_sn, vectorClock, receiverID, from, packet) {
-    let closestNode = kBucket.closestNode(receiverID);
-    if (old_sn !== closestNode && _list.stored.includes(old_sn)) {
-        DB.deleteData(old_sn, vectorClock);
-        if (_list[old_sn] < floGlobals.sn_config.backupDepth && _nextNode.id !== from)
+function deleteMigratedData(data, from, packet) {
+    let closestNode = kBucket.closestNode(data.receiverID);
+    if (data.snID !== closestNode && _list.stored.includes(data.snID)) {
+        DB.deleteData(data.snID, data.vectorClock);
+        if (_list[data.snID] < floGlobals.sn_config.backupDepth && _nextNode.id !== from)
             _nextNode.send(packet);
     };
 };
@@ -583,7 +583,7 @@ function forwardToNextNode(mode, data) {
         'DATA': STORE_BACKUP_DATA
     };
     if (mode in modeMap && _nextNode.id)
-        _nextNode.send(packet_.constuct({
+        _nextNode.send(packet_.construct({
             type: modeMap[mode],
             data: data
         }));
@@ -635,12 +635,12 @@ dataMigration.process_del = async function(del_nodes) {
                         let closest = kBucket.closestNode(d.receiverID);
                         if (_list.serving.includes(closest)) {
                             DB.storeData(closest, d);
-                            _nextNode.send(packet_.constuct({
+                            _nextNode.send(packet_.construct({
                                 type: STORE_BACKUP_DATA,
                                 data: d
                             }));
                         } else
-                            ws_connections[closest].send(packet_.constuct({
+                            ws_connections[closest].send(packet_.construct({
                                 type: STORE_MIGRATED_DATA,
                                 data: d
                             }));
@@ -684,20 +684,22 @@ dataMigration.process_new = async function(new_nodes) {
                     if (new_nodes.includes(closest)) {
                         if (_list.serving.includes(closest)) {
                             DB.storeData(closest, d);
-                            _nextNode.send(packet_.constuct({
+                            _nextNode.send(packet_.construct({
                                 type: STORE_BACKUP_DATA,
                                 data: d
                             }));
                         } else
-                            ws_connections[closest].send(packet_.constuct({
+                            ws_connections[closest].send(packet_.construct({
                                 type: STORE_MIGRATED_DATA,
                                 data: d
                             }));
-                        _nextNode.send(packet_.constuct({
+                        _nextNode.send(packet_.construct({
                             type: DELETE_MIGRATED_DATA,
-                            vectorClock: d.vectorClock,
-                            receiverID: d.receiverID,
-                            snID: n
+                            data: {
+                                vectorClock: d.vectorClock,
+                                receiverID: d.receiverID,
+                                snID: n
+                            }
                         }));
                     };
                 });
@@ -717,7 +719,7 @@ dataMigration.process_new = async function(new_nodes) {
 
 dataMigration.intimateAllNodes = function() {
     connectToAliveNodes().then(ws_connections => {
-        let packet = packet_.constuct({
+        let packet = packet_.construct({
             type: INITIATE_REFRESH
         });
         for (let n in ws_connections)

@@ -197,11 +197,15 @@ function Database(user, password, dbname, host = 'localhost') {
 
     db.addData = function(snID, data) {
         return new Promise((resolve, reject) => {
-            let attr = Object.keys(H_struct).map(a => H_struct[a]).concat(Object.keys(B_struct).map(a => B_struct[a]));
+            data[L_struct.STATUS] = 1;
+            data[L_struct.LOG_TIME] = Date.now();
+            let attr = Object.keys(H_struct).map(a => H_struct[a])
+                .concat(Object.keys(B_struct).map(a => B_struct[a]))
+                .concat(Object.keys(L_struct).map(a => L_struct[a]));
             let values = attr.map(a => data[a]);
             let statement = "INSERT INTO _" + snID +
-                " (" + attr.join(", ") + ", " + L_struct.STATUS + ", " + L_struct.LOG_TIME + ") " +
-                "VALUES (" + attr.map(a => '?').join(", ") + ", 1, " + Date.now() + ")";
+                " (" + attr.join(", ") + ") " +
+                "VALUES (" + attr.map(a => '?').join(", ") + ")";
             data = Object.fromEntries(attr.map((a, i) => [a, values[i]]));
             db.query(statement, values)
                 .then(result => resolve(data))
@@ -298,15 +302,19 @@ function Database(user, password, dbname, host = 'localhost') {
         });
     };
 
-    db.storeData = function(snID, data) {
+    db.storeData = function(snID, data, updateLogTime = false) {
         return new Promise((resolve, reject) => {
-            let u_attr = Object.keys(B_struct).map(a => B_struct[a]);
+            if (updateLogTime)
+                data[L_struct.LOG_TIME] = Date.now();
+            let u_attr = Object.keys(B_struct).map(a => B_struct[a])
+                .concat(Object.keys(L_struct).map(a => L_struct[a]))
+                .concat(Object.keys(T_struct).map(a => T_struct[a]));
             let attr = Object.keys(H_struct).map(a => H_struct[a]).concat(u_attr);
             let values = attr.map(a => data[a]);
             let u_values = u_attr.map(a => data[a]);
             let statement = "INSERT INTO _" + snID +
-                " (" + attr.join(", ") + ", " + L_struct.STATUS + ", " + L_struct.LOG_TIME + ") " +
-                "VALUES (" + attr.map(a => '?').join(", ") + ", 1, " + Date.now() + ") " +
+                " (" + attr.join(", ") + ") " +
+                "VALUES (" + attr.map(a => '?').join(", ") + ") " +
                 "ON DUPLICATE KEY UPDATE " + u_attr.map(a => a + "=?").join(", ");
             db.query(statement, values.concat(u_values))
                 .then(result => resolve(data))
@@ -327,14 +335,26 @@ function Database(user, password, dbname, host = 'localhost') {
         });
     };
 
+    db.deleteData = function(snID, vectorClock) {
+        return new Promise((resolve, reject) => {
+            let statement = "DELETE FROM _" + snID +
+                " WHERE " + H_struct.VECTOR_CLOCK + "=?";
+            db.query(statement, [vectorClock])
+                .then(result => resolve(result))
+                .catch(error => reject(error));
+        });
+    }
+
     db.clearAuthorisedAppData = function(snID, app, adminID, subAdmins, timestamp) {
         return new Promise((resolve, reject) => {
             let statement = "DELETE FROM _" + snID +
                 " WHERE ( " + H_struct.TIME + "<? AND " +
                 H_struct.APPLICATION + "=? AND " +
-                T_struct.TAG + " IS NULL ) AND ( " +
-                H_struct.RECEIVER_ID + " != ? OR " +
-                H_struct.SENDER_ID + " NOT IN (" + subAdmins.map(a => "?").join(", ") + ") )";
+                T_struct.TAG + " IS NULL )" +
+                (subAdmins.length ? " AND ( " +
+                    H_struct.RECEIVER_ID + " != ? OR " +
+                    H_struct.SENDER_ID + " NOT IN (" + subAdmins.map(a => "?").join(", ") + ") )" :
+                    "");
             db.query(statement, [timestamp, app].concat(subAdmins).push(adminID))
                 .then(result => resolve(result))
                 .catch(error => reject(error));
@@ -344,8 +364,10 @@ function Database(user, password, dbname, host = 'localhost') {
     db.clearUnauthorisedAppData = function(snID, appList, timestamp) {
         return new Promise((resolve, reject) => {
             let statement = "DELETE FROM _" + snID +
-                "WHERE " + H_struct.TIME + "<? AND " +
-                H_struct.APPLICATION + " NOT IN (" + appList.map(a => "?").join(", ") + ")";
+                " WHERE " + H_struct.TIME + "<?" +
+                (appList.length ? " AND " +
+                    H_struct.APPLICATION + " NOT IN (" + appList.map(a => "?").join(", ") + ")" :
+                    "");
             db.query(statement, [timestamp].concat(appList))
                 .then(result => resolve(result))
                 .catch(error => reject(error));

@@ -2,7 +2,7 @@ const config = require('../args/config.json');
 global.floGlobals = require("./floGlobals");
 require('./set_globals');
 require('./lib');
-require('./kBucket');
+const K_Bucket = require('./kBucket');
 require('./floCrypto');
 require('./floBlockchainAPI');
 const Database = require("./database");
@@ -87,13 +87,12 @@ function refreshBlockchainData(base, flag) {
     return new Promise((resolve, reject) => {
         readSupernodeConfigFromAPI(base, flag).then(result => {
             console.log(result);
-            kBucket.launch().then(result => {
-                //console.log(result);
-                readAppSubAdminListFromAPI(base)
-                    .then(result => console.log(result))
-                    .catch(warn => console.warn(warn))
-                    .finally(_ => resolve("Refreshed Data from blockchain"));
-            }).catch(error => reject(error));
+            global.kBucket = new K_Bucket();
+            console.log("SNCO:", kBucket.order);
+            readAppSubAdminListFromAPI(base)
+                .then(result => console.log(result))
+                .catch(warn => console.warn(warn))
+                .finally(_ => resolve("Refreshed Data from blockchain"));
         }).catch(error => reject(error));
     });
 };
@@ -241,12 +240,12 @@ function selfDiskMigration(node_change) {
                     disks.push(result[i][j].split("_")[1]);
         disks.forEach(n => {
             if (node_change[n] === false)
-                DB.dropTable(n).then(_ => null).catch(_ => null);
+                DB.dropTable(n).then(_ => null).catch(e => console.error(e));
             DB.getData(n, 0).then(result => {
                 result.forEach(d => {
                     let closest = kBucket.closestNode(d.receiverID);
                     if (closest !== n)
-                        DB.deleteData(n, d.vectorClock).then(_ => null).catch(_ => null);
+                        DB.deleteData(n, d.vectorClock).then(_ => null).catch(e => console.error(e));
                 });
             }).catch(error => console.error(error));
         });

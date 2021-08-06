@@ -1,10 +1,9 @@
 'use strict';
 require('./lib/BuildKBucket');
-(function(GLOBAL) {
-    var kBucket = GLOBAL.kBucket = {};
-    var SNKB, SNCO;
 
-    function decodeID(floID) {
+module.exports = function K_Bucket(options = {}) {
+
+    const decodeID = function(floID) {
         let k = bitjs.Base58.decode(floID);
         k.shift();
         k.splice(-4, 4);
@@ -15,97 +14,84 @@ require('./lib/BuildKBucket');
         return nodeIdNewInt8Array;
     };
 
-    function distanceOf(floID) {
-        let decodedId = decodeID(floID);
-        return SNKB.distance(SNKB.localNodeId, decodedId);
-    };
+    const list = options.list || Object.keys(floGlobals.supernodes);
+    const refID = options.masterID || floGlobals.SNStorageID;
+    const _KB = new BuildKBucket({
+        localNodeId: decodeID(refID)
+    });
+    list.forEach(id => _KB.add({
+        id: decodeID(id),
+        floID: id
+    }));
+    const _CO = list.map(sn => [_KB.distance(decodeID(refID), decodeID(sn)), sn])
+        .sort((a, b) => a[0] - b[0])
+        .map(a => a[1]);
 
-    function constructKB(list, refID) {
-        let KB = new BuildKBucket({
-            localNodeId: decodeID(refID)
-        });
-        list.forEach(id => KB.add({
-            id: decodeID(id),
-            floID: id
-        }));
-        return KB;
-    };
+    const self = this;
 
-    kBucket.launch = function() {
-        return new Promise((resolve, reject) => {
-            try {
-                let superNodeList = Object.keys(floGlobals.supernodes);
-                let masterID = floGlobals.SNStorageID;
-                SNKB = constructKB(superNodeList, masterID);
-                SNCO = superNodeList.map(sn => [distanceOf(sn), sn])
-                    .sort((a, b) => a[0] - b[0])
-                    .map(a => a[1]);
-                resolve('SuperNode KBucket formed');
-            } catch (error) {
-                reject(error);
-            };
-        });
-    };
+    Object.defineProperty(self, 'order', {
+        get: () => Array.from(_CO)
+    });
 
-    kBucket.innerNodes = function(id1, id2) {
-        if (!SNCO.includes(id1) || !SNCO.includes(id2))
-            throw Error('Given nodes are not supernode');
+    self.innerNodes = function(id1, id2) {
+        if (!_CO.includes(id1) || !_CO.includes(id2))
+            throw Error('Given nodes are not in KB');
         let iNodes = [];
-        for (let i = SNCO.indexOf(id1) + 1; SNCO[i] != id2; i++) {
-            if (i < SNCO.length)
-                iNodes.push(SNCO[i]);
+        for (let i = _CO.indexOf(id1) + 1; _CO[i] != id2; i++) {
+            if (i < _CO.length)
+                iNodes.push(_CO[i]);
             else i = -1;
         };
         return iNodes;
     };
 
-    kBucket.outterNodes = function(id1, id2) {
-        if (!SNCO.includes(id1) || !SNCO.includes(id2))
-            throw Error('Given nodes are not supernode');
+    self.outterNodes = function(id1, id2) {
+        if (!_CO.includes(id1) || !_CO.includes(id2))
+            throw Error('Given nodes are not in KB');
         let oNodes = [];
-        for (let i = SNCO.indexOf(id2) + 1; SNCO[i] != id1; i++) {
-            if (i < SNCO.length)
-                oNodes.push(SNCO[i]);
+        for (let i = _CO.indexOf(id2) + 1; _CO[i] != id1; i++) {
+            if (i < _CO.length)
+                oNodes.push(_CO[i]);
             else i = -1;
         };
         return oNodes;
     };
 
-    kBucket.prevNode = function(id, N = 1) {
-        let n = N || SNCO.length;
-        if (!SNCO.includes(id))
-            throw Error('Given node is not supernode');
+    self.prevNode = function(id, N = 1) {
+        let n = N || _CO.length;
+        if (!_CO.includes(id))
+            throw Error('Given node is not KB');
         let pNodes = [];
-        for (let i = 0, j = SNCO.indexOf(id) - 1; i < n; j--) {
-            if (j == SNCO.indexOf(id))
+        for (let i = 0, j = _CO.indexOf(id) - 1; i < n; j--) {
+            if (j == _CO.indexOf(id))
                 break;
             else if (j > -1)
-                pNodes[i++] = SNCO[j];
-            else j = SNCO.length;
+                pNodes[i++] = _CO[j];
+            else j = _CO.length;
         };
         return (N == 1 ? pNodes[0] : pNodes);
     };
 
-    kBucket.nextNode = function(id, N = 1) {
-        let n = N || SNCO.length;
-        if (!SNCO.includes(id))
-            throw Error('Given node is not supernode');
+    self.nextNode = function(id, N = 1) {
+        let n = N || _CO.length;
+        if (!_CO.includes(id))
+            throw Error('Given node is not KB');
         let nNodes = [];
-        for (let i = 0, j = SNCO.indexOf(id) + 1; i < n; j++) {
-            if (j == SNCO.indexOf(id))
+        for (let i = 0, j = _CO.indexOf(id) + 1; i < n; j++) {
+            if (j == _CO.indexOf(id))
                 break;
-            else if (j < SNCO.length)
-                nNodes[i++] = SNCO[j];
+            else if (j < _CO.length)
+                nNodes[i++] = _CO[j];
             else j = -1;
         };
         return (N == 1 ? nNodes[0] : nNodes);
     };
 
-    kBucket.closestNode = function(id, N = 1) {
+    self.closestNode = function(id, N = 1) {
         let decodedId = decodeID(id);
-        let n = N || SNCO.length;
-        let cNodes = SNKB.closest(decodedId, n)
+        let n = N || _CO.length;
+        let cNodes = _KB.closest(decodedId, n)
             .map(k => k.floID);
         return (N == 1 ? cNodes[0] : cNodes);
     };
-})(typeof global !== "undefined" ? global : window);
+}

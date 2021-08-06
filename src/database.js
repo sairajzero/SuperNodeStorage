@@ -343,7 +343,7 @@ function Database(user, password, dbname, host = 'localhost') {
                 .then(result => resolve(result))
                 .catch(error => reject(error));
         });
-    }
+    };
 
     db.clearAuthorisedAppData = function(snID, app, adminID, subAdmins, timestamp) {
         return new Promise((resolve, reject) => {

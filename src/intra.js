@@ -454,12 +454,12 @@ function orderBackup(order) {
         req_sync = [];
     let cur_serve = kBucket.innerNodes(_prevNode.id, myFloID).concat(myFloID);
     for (let n in order) {
-        if (!cur_serve.includes(n) && order[n] + 1 !== _list[n]) {
+        if (!cur_serve.includes(n) && order[n] + 1 !== _list[n] && n in floGlobals.supernodes) {
             if (order[n] >= floGlobals.sn_config.backupDepth)
                 DB.dropTable(n).then(_ => null)
                 .catch(error => console.error(error))
                 .finally(_ => _list.delete(n));
-            else {
+            else if (order[n] >= 0) {
                 if (_list[n] === undefined)
                     req_sync.push(n);
                 _list[n] = order[n] + 1;
@@ -583,7 +583,7 @@ function deleteMigratedData(data, from, packet) {
 };
 
 function initiateRefresh() {
-    refresher.invoke(false).then(_ => null).catch(e => console.error(e));
+    refresher.invoke(false).then(_ => null).catch(_ => null);
 };
 
 //Forward incoming to next node
@@ -603,16 +603,15 @@ function forwardToNextNode(mode, data) {
 function dataMigration(node_change, flag) {
     if (!Object.keys(node_change).length)
         return;
-    console.log("Node list changed! Data migration required");
+    console.log("Node list changed! Data migration required", node_change);
     if (flag) dataMigration.intimateAllNodes(); //Initmate All nodes to call refresher
     let new_nodes = [],
         del_nodes = [];
     for (let n in node_change)
         (node_change[n] ? new_nodes : del_nodes).push(n);
-    if (_prevNode.id && del_nodes.includes(_prevNode.id)) {
-        _list[_prevNode.id] = 0; //Temporary serve for the deleted node
+    if (_prevNode.id && del_nodes.includes(_prevNode.id))
         _prevNode.close();
-    };
+    const old_kb = kBucket;
     setTimeout(() => {
         //reconnect next node if current next node is deleted
         if (_nextNode.id) {
@@ -634,16 +633,17 @@ function dataMigration(node_change, flag) {
 
         setTimeout(() => {
             dataMigration.process_new(new_nodes);
-            dataMigration.process_del(del_nodes);
+            dataMigration.process_del(del_nodes, old_kb);
         }, MIGRATE_WAIT_DELAY);
     }, MIGRATE_WAIT_DELAY);
 };
 
 //data migration sub-process: Deleted nodes
-dataMigration.process_del = async function(del_nodes) {
+dataMigration.process_del = async function(del_nodes, old_kb) {
     if (!del_nodes.length)
         return;
-    let process_nodes = del_nodes.filter(n => _list.serving.includes(n));
+    let serve = _prevNode.id ? old_kb.innerNodes(_prevNode.id, myFloID) : _list.serving;
+    let process_nodes = del_nodes.filter(n => serve.includes(n));
     if (process_nodes.length) {
         connectToAllActiveNodes().then(ws_connections => {
             let remaining = process_nodes.length;

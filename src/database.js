@@ -167,7 +167,7 @@ function Database(user, password, dbname, host = 'localhost') {
                 H_struct.RECEIVER_ID + " CHAR(34) NOT NULL, " +
                 H_struct.APPLICATION + " TINYTEXT NOT NULL, " +
                 H_struct.TYPE + " TINYTEXT, " +
-                B_struct.MESSAGE + " TEXT NOT NULL, " +
+                B_struct.MESSAGE + " LONGTEXT NOT NULL, " +
                 H_struct.TIME + " BIGINT NOT NULL, " +
                 B_struct.SIGNATURE + " VARCHAR(160) NOT NULL, " +
                 H_struct.PUB_KEY + " CHAR(66) NOT NULL, " +

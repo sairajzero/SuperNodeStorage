@@ -170,13 +170,13 @@ function readAppSubAdminListFromAPI(base) {
     for (let app in base.appList) {
         promises.push(new Promise((resolve, reject) => {
             floBlockchainAPI.readData(base.appList[app], {
-                ignoreOld: base.lastTx[`${app}_${base.appList[app]}`],
+                ignoreOld: base.lastTx[`${app}_${base.appList[app]}`] || 0,
                 sentOnly: true,
                 pattern: app
             }).then(result => {
                 let subAdmins = new Set(base.appSubAdmins[app]);
                 result.data.reverse().forEach(data => {
-                    let content = JSON.parse(result.data[i])[app];
+                    let content = JSON.parse(data)[app];
                     if (Array.isArray(content.removeSubAdmin))
                         content.removeSubAdmin.forEach(sa => subAdmins.delete(sa));
                     if (Array.isArray(content.addSubAdmin))
@@ -198,8 +198,8 @@ function readAppSubAdminListFromAPI(base) {
         Promise.allSettled(promises).then(results => {
             if (results.reduce((a, r) => r.status === "rejected" ? ++a : a, 0)) {
                 let error = Object.fromEntries(results.filter(r => r.status === "rejected").map(r => r.reason));
-                console.error(JSON.stringify(error));
-                reject(`subAdmin List for APPS(${Object.keys(error)} might not have loaded correctly`);
+                console.debug(error);
+                reject(`subAdmin List for APPS(${Object.keys(error)}) might not have loaded correctly`);
             } else
                 resolve("Loaded subAdmin List for all APPs successfully");
         });

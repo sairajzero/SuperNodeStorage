@@ -149,7 +149,7 @@ function Database(user, password, dbname, host = 'localhost') {
                 result.lastTx = Object.fromEntries(tmp.LastTxs.map(a => [a.ID, a.N]));
                 result.sn_config = Object.fromEntries(tmp.Configs.map(a => [a.NAME, a.VAL]));
                 result.appList = Object.fromEntries(tmp.Applications.map(a => [a.APP_NAME, a.ADMIN_ID]));
-                result.appSubAdmins = Object.fromEntries(tmp.Applications.map(a => [a.APP_NAME, a.SUB_ADMINS.split(",")]));
+                result.appSubAdmins = Object.fromEntries(tmp.Applications.map(a => [a.APP_NAME, a.SUB_ADMINS ? a.SUB_ADMINS.split(",") : []]));
                 result.supernodes = Object.fromEntries(tmp.SuperNodes.map(a => [a.FLO_ID, {
                     pubKey: a.PUB_KEY,
                     uri: a.URI

@@ -170,7 +170,7 @@ function readAppSubAdminListFromAPI(base) {
     for (let app in base.appList) {
         promises.push(new Promise((resolve, reject) => {
             floBlockchainAPI.readData(base.appList[app], {
-                ignoreOld: base.lastTx[`${app}_${base.appList[app]}`] || 0,
+                ignoreOld: base.lastTx[base.appList[app]] || 0,
                 sentOnly: true,
                 pattern: app
             }).then(result => {
@@ -184,7 +184,7 @@ function readAppSubAdminListFromAPI(base) {
                 });
                 base.appSubAdmins[app] = Array.from(subAdmins);
                 Promise.allSettled([
-                    DB.setLastTx(`${app}_${base.appList[app]}`, result.totalTxs),
+                    DB.setLastTx(base.appList[app], result.totalTxs),
                     DB.setSubAdmin(app, base.appSubAdmins[app])
                 ]).then(results => {
                     if (results.reduce((a, r) => r.status === "rejected" ? ++a : a, 0))

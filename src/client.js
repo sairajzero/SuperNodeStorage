@@ -110,7 +110,7 @@ function processTagFromUser(data) {
 function checkIfRequestSatisfy(request, data) {
     if (!request || request.mostRecent || request.receiverID !== data.receiverID)
         return false;
-    if (request.atKey && request.atKey !== data.vectorClock)
+    if (request.atVectorClock && request.atVectorClock !== data.vectorClock)
         return false;
     if (request.lowerVectorClock && request.lowerVectorClock > data.vectorClock)
         return false;

@@ -237,11 +237,11 @@ function Database(user, password, dbname, host = 'localhost') {
     db.searchData = function(snID, request) {
         return new Promise((resolve, reject) => {
             let conditionArr = [];
-            if (request.lowerVectorClock || request.upperVectorClock || request.atKey) {
-                if (request.lowerVectorClock && request.upperVectorClock)
+            if (request.lowerVectorClock || request.upperVectorClock || request.atVectorClock) {
+                if (request.atVectorClock)
+                    conditionArr.push(`${H_struct.VECTOR_CLOCK} = '${request.atVectorClock}'`);
+                else if (request.lowerVectorClock && request.upperVectorClock)
                     conditionArr.push(`${H_struct.VECTOR_CLOCK} BETWEEN '${request.lowerVectorClock}' AND '${request.upperVectorClock}'`);
-                else if (request.atKey)
-                    conditionArr.push(`${H_struct.VECTOR_CLOCK} = '${request.atKey}'`);
                 else if (request.lowerVectorClock)
                     conditionArr.push(`${H_struct.VECTOR_CLOCK} >= '${request.lowerVectorClock}'`);
                 else if (request.upperVectorClock)

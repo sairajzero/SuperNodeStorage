@@ -131,10 +131,96 @@ function checkIfRequestSatisfy(request, data) {
     return true;
 };
 
+function processStatusFromUser(request, ws) {
+    if (request.status) {
+        //Set user-online status
+        if (!request.floID || !request.application || !request.sign || !request.pubKey || !request.time)
+            return ws.send("Invalid request parameters");
+        if (request.floID !== floCrypto.getFloID(request.pubKey))
+            return ws.send("Invalid pubKey");
+        let hashcontent = ["time", "application", "floID"].map(d => request[d]).join("|");
+        if (!floCrypto.verifySign(hashcontent, request.sign, request.pubKey))
+            return ws.send("Invalid signature");
+        clientOnline(ws, request.application, request.floID);
+    } else {
+        //Track online status
+        if (!request.application || !Array.isArray(request.trackList))
+            return ws.send("Invalid request parameters");
+        addRequestClient(ws, request.application, request.trackList);
+    }
+}
+
+let onlineClients = {},
+    requestClients = {};
+
+const ONLINE = 1,
+    OFFLINE = 0;
+
+function clientOnline(ws, application, floID) {
+    if (!(application in onlineClients))
+        onlineClients[application] = {};
+    if (floID in onlineClients[application])
+        onlineClients[application][floID] += 1;
+    else {
+        onlineClients[application][floID] = 1;
+        informRequestClients(application, floID, ONLINE);
+    }
+    ws.on('close', () => clientOffline(application, floID));
+}
+
+function clientOffline(application, floID) {
+    if (application in onlineClients)
+        if (floID in onlineClients[application]) {
+            if (onlineClients[application][floID] > 1)
+                onlineClients[application][floID] -= 1;
+            else {
+                delete onlineClients[application][floID];
+                informRequestClients(application, floID, OFFLINE);
+                if (!Object.keys(onlineClients[application]).length)
+                    delete onlineClients[application];
+            }
+        }
+}
+
+function addRequestClient(ws, application, trackList) {
+    let id = Date.now() + floCrypto.randString(8);
+    if (!(application in requestClients))
+        requestClients[application] = {};
+    requestClients[application][id] = {
+        ws: ws,
+        trackList
+    };
+    let status = {};
+    if (application in onlineClients)
+        trackList.forEach(floID => status[floID] = (onlineClients[application][floID] ? ONLINE : OFFLINE));
+    else
+        trackList.forEach(floID => status[floID] = OFFLINE);
+    ws.send(JSON.stringify(status));
+    ws.on('close', () => rmRequestClient(application, id));
+}
+
+function rmRequestClient(application, id) {
+    if ((application in requestClients) && (id in requestClients[application])) {
+        delete requestClients[application][id];
+        if (!Object.keys(requestClients[application]).length)
+            delete requestClients[application];
+    }
+}
+
+function informRequestClients(application, floID, status) {
+    if (application in requestClients)
+        for (let r in requestClients[application])
+            if (requestClients[application][r].trackList.includes(floID))
+                requestClients[application][r].ws.send(JSON.stringify({
+                    [floID]: status
+                }));
+}
+
 module.exports = {
     checkIfRequestSatisfy,
     processRequestFromUser,
     processIncomingData,
+    processStatusFromUser,
     set DB(db) {
         DB = db;
     },

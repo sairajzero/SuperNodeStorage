@@ -53,8 +53,10 @@ module.exports = function Server(port, client, intra) {
                 console.debug("WS: ", message);
                 try {
                     var request = JSON.parse(message);
-                    client.processRequestFromUser(request)
-                        .then(result => {
+                    if (request.status !== undefined)
+                        client.processStatusFromUser(request, ws);
+                    else
+                        client.processRequestFromUser(request).then(result => {
                             ws.send(JSON.stringify(result[0]));
                             ws._liveReq = request;
                         }).catch(error => {

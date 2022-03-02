@@ -289,6 +289,8 @@ function Database(user, password, dbname, host = 'localhost') {
                 else if (request.upperVectorClock)
                     conditionArr.push(`${H_struct.VECTOR_CLOCK} <= '${request.upperVectorClock}'`);
             }
+            if (request.afterTime)
+                conditionArr.push(`${L_struct.LOG_TIME} > ${request.afterTime}`);
             conditionArr.push(`${H_struct.APPLICATION} = '${request.application}'`);
             conditionArr.push(`${H_struct.RECEIVER_ID} = '${request.receiverID}'`)
             if (request.comment)
@@ -302,9 +304,9 @@ function Database(user, password, dbname, host = 'localhost') {
                     conditionArr.push(`${H_struct.SENDER_ID} = '${request.senderID}'`);
             };
             //console.log(conditionArr);
-            let attr = Object.keys(H_struct).map(a => H_struct[a]).concat(Object.keys(B_struct).map(a => B_struct[a]));
-            let statement = "SELECT " + attr.join(", ") +
-                " FROM _" + snID +
+            //let attr = Object.keys(H_struct).map(a => H_struct[a]).concat(Object.keys(B_struct).map(a => B_struct[a]));
+            //let statement = "SELECT " + attr.join(", ") + " FROM _" + snID +
+            let statement = "SELECT * FROM _" + snID +
                 " WHERE " + conditionArr.join(" AND ") +
                 (request.mostRecent ? " LIMIT 1" : (" ORDER BY " + H_struct.VECTOR_CLOCK));
             db.query(statement)

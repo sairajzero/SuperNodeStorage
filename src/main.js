@@ -241,7 +241,7 @@ function selfDiskMigration(node_change) {
         disks.forEach(n => {
             if (node_change[n] === false)
                 DB.dropTable(n).then(_ => null).catch(e => console.error(e));
-            DB.getData(n, 0).then(result => {
+            DB.readAllData(n, 0).then(result => {
                 result.forEach(d => {
                     let closest = kBucket.closestNode(d.receiverID);
                     if (closest !== n)

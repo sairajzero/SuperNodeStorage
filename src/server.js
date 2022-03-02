@@ -2,6 +2,9 @@ const http = require('http');
 const WebSocket = require('ws');
 const url = require('url');
 
+const INVALID_E_CODE = 400,
+    INTERNAL_E_CODE = 500;
+
 module.exports = function Server(port, client, intra) {
 
     var refresher; //container for refresher
@@ -16,14 +19,21 @@ module.exports = function Server(port, client, intra) {
             console.debug("GET:", u.search);
             client.processRequestFromUser(u.query)
                 .then(result => res.end(JSON.stringify(result[0])))
-                .catch(error => res.end(error.toString()));
+                .catch(error => {
+                    if (error instanceof INVALID)
+                        res.writeHead(INVALID_E_CODE).end(error.message);
+                    else {
+                        console.error(error);
+                        res.writeHead(INTERNAL_E_CODE).end("Unable to process request");
+                    }
+                });
         } else if (req.method === "POST") {
             //POST: All data processing (required JSON input)
             let data = '';
             req.on('data', chunk => data += chunk);
             req.on('end', () => {
                 console.debug("POST:", data);
-                //process the data storing
+                //process the all data request types
                 client.processIncomingData(data).then(result => {
                     res.end(JSON.stringify(result[0]));
                     if (result[1]) {
@@ -32,7 +42,14 @@ module.exports = function Server(port, client, intra) {
                             sendToLiveRequests(result[0]);
                         intra.forwardToNextNode(result[1], result[0]);
                     };
-                }).catch(error => res.end(error.toString()));
+                }).catch(error => {
+                    if (error instanceof INVALID)
+                        res.writeHead(INVALID_E_CODE).end(error.message);
+                    else {
+                        console.error(error);
+                        res.writeHead(INTERNAL_E_CODE).end("Unable to process request");
+                    }
+                });
             });
         };
     });
@@ -60,13 +77,19 @@ module.exports = function Server(port, client, intra) {
                             ws.send(JSON.stringify(result[0]));
                             ws._liveReq = request;
                         }).catch(error => {
-                            if (floGlobals.sn_config.errorFeedback)
-                                ws.send(error.toString());
+                            if (floGlobals.sn_config.errorFeedback) {
+                                if (error instanceof INVALID)
+                                    ws.send(`${INVALID_E_CODE}: ${error.message}`);
+                                else {
+                                    console.error(error);
+                                    ws.send(`${INTERNAL_E_CODE}: Unable to process request`);
+                                }
+                            }
                         });
                 } catch (error) {
                     console.error(error);
                     if (floGlobals.sn_config.errorFeedback)
-                        ws.send("Request not in JSON format");
+                        ws.send(`${INVALID_E_CODE}: Request not in JSON format`);
                 };
             };
         };

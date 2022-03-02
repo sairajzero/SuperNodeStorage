@@ -54,6 +54,13 @@ const T_struct = {
     TAG_SIGN: "tag_sign"
 };
 
+const F_struct = {
+    NOTE: "note",
+    NOTE_TIME: "note_time",
+    NOTE_KEY: "note_key",
+    NOTE_SIGN: "note_sign",
+}
+
 function Database(user, password, dbname, host = 'localhost') {
     const db = {};
 
@@ -178,6 +185,10 @@ function Database(user, password, dbname, host = 'localhost') {
                 T_struct.TAG_TIME + " BIGINT, " +
                 T_struct.TAG_KEY + " CHAR(66), " +
                 T_struct.TAG_SIGN + " VARCHAR(160), " +
+                F_struct.NOTE + " TINYTEXT, " +
+                F_struct.NOTE_TIME + " BIGINT, " +
+                F_struct.NOTE_KEY + " CHAR(66), " +
+                F_struct.NOTE_SIGN + " VARCHAR(160), " +
                 "PRIMARY KEY (" + H_struct.VECTOR_CLOCK + ")" +
                 " )";
             db.query(statement)
@@ -213,6 +224,16 @@ function Database(user, password, dbname, host = 'localhost') {
         });
     };
 
+    db.getData = function(snID, vectorClock) {
+        return new Promise((resolve, reject) => {
+            let statement = "SELECT * FROM _" + snID +
+                "WHERE " + H_struct.VECTOR_CLOCK + "=?";
+            db.query(statement, [vectorClock])
+                .then(result => resolve(result))
+                .catch(error => reject(error))
+        })
+    };
+
     db.tagData = function(snID, vectorClock, tag, tagTime, tagKey, tagSign) {
         return new Promise((resolve, reject) => {
             let data = {
@@ -233,6 +254,27 @@ function Database(user, password, dbname, host = 'localhost') {
                 .catch(error => reject(error));
         });
     };
+
+    db.noteData = function(snID, vectorClock, note, noteTime, noteKey, noteSign) {
+        return new Promise((resolve, reject) => {
+            let data = {
+                [F_struct.NOTE]: note,
+                [F_struct.NOTE_TIME]: noteTime,
+                [F_struct.NOTE_KEY]: noteKey,
+                [F_struct.NOTE_SIGN]: noteSign,
+                [L_struct.LOG_TIME]: Date.now()
+            };
+            let attr = Object.keys(data);
+            let values = attr.map(a => data[a]).concat(vectorClock);
+            data[H_struct.VECTOR_CLOCK] = vectorClock; //also add vectorClock to resolve data
+            let statement = "UPDATE _" + snID +
+                " SET " + attr.map(a => a + "=?").join(", ") +
+                " WHERE " + H_struct.VECTOR_CLOCK + "=?";
+            db.query(statement, values)
+                .then(result => resolve(data))
+                .catch(error => reject(error));
+        });
+    }
 
     db.searchData = function(snID, request) {
         return new Promise((resolve, reject) => {
@@ -291,7 +333,7 @@ function Database(user, password, dbname, host = 'localhost') {
         });
     };
 
-    db.getData = function(snID, logtime) {
+    db.readAllData = function(snID, logtime) {
         return new Promise((resolve, reject) => {
             let statement = "SELECT * FROM _" + snID +
                 " WHERE " + L_struct.LOG_TIME + ">" + logtime +
@@ -325,15 +367,26 @@ function Database(user, password, dbname, host = 'localhost') {
     db.storeTag = function(snID, data) {
         return new Promise((resolve, reject) => {
             let attr = Object.keys(T_struct).map(a => T_struct[a]).concat(L_struct.LOG_TIME);
-            let values = attr.map(a => data[a]);
+            let values = attr.map(a => data[a]).concat(data[H_struct.VECTOR_CLOCK]);
             let statement = "UPDATE _" + snID +
                 " SET " + attr.map(a => a + "=?").join(", ") +
-                " WHERE " + H_struct.VECTOR_CLOCK + "=" + data[H_struct.VECTOR_CLOCK];
+                " WHERE " + H_struct.VECTOR_CLOCK + "=?";
             db.query(statement, values)
                 .then(result => resolve(data))
                 .catch(error => reject(error));
         });
     };
+
+    db.storeNote = function(snID, data) {
+        let attr = Object.keys(F_struct).map(a => F_struct[a]).concat(L_struct.LOG_TIME);
+        let values = attr.map(a => data[a]).concat(data[H_struct.VECTOR_CLOCK]);
+        let statement = "UPDATE _" + snID +
+            " SET " + attr.map(a => a + "=?").join(", ") +
+            " WHERE " + H_struct.VECTOR_CLOCK + "=?";
+        db.query(statement, values)
+            .then(result => resolve(data))
+            .catch(error => reject(error));
+    }
 
     db.deleteData = function(snID, vectorClock) {
         return new Promise((resolve, reject) => {
@@ -355,7 +408,7 @@ function Database(user, password, dbname, host = 'localhost') {
                     H_struct.RECEIVER_ID + " != ? OR " +
                     H_struct.SENDER_ID + " NOT IN (" + subAdmins.map(a => "?").join(", ") + ") )" :
                     "");
-            db.query(statement, [timestamp, app].concat(subAdmins).push(adminID))
+            db.query(statement, [timestamp, app, adminID].concat(subAdmins))
                 .then(result => resolve(result))
                 .catch(error => reject(error));
         });

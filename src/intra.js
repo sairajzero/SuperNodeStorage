@@ -10,6 +10,7 @@ const SUPERNODE_INDICATOR = '$',
     DELETE_MIGRATED_DATA = "migratedDelete",
     //DELETE_BACKUP_DATA = "backupDelete",
     TAG_BACKUP_DATA = "backupTag",
+    NOTE_BACKUP_DATA = "backupNote",
     //EDIT_BACKUP_DATA = "backupEdit",
     INITIATE_REFRESH = "initiateRefresh",
     DATA_REQUEST = "dataRequest",
@@ -285,6 +286,9 @@ function processTaskFromPrevNode(packet) {
                 case TAG_BACKUP_DATA:
                     tagBackupData(task.data, from, packet);
                     break;
+                case NOTE_BACKUP_DATA:
+                    noteBackupData(task.data, from, packet);
+                    break;
                 case DATA_REQUEST:
                     sendStoredData(task.nodes, _prevNode);
                     break;
@@ -512,7 +516,7 @@ orderBackup.requestData = function(req_sync, new_order) {
 function sendStoredData(lastlogs, node) {
     for (let n in lastlogs) {
         if (_list.stored.includes(n)) {
-            DB.getData(n, lastlogs[n]).then(result => {
+            DB.readAllData(n, lastlogs[n]).then(result => {
                 node.send(packet_.construct({
                     type: DATA_SYNC,
                     id: n,
@@ -560,6 +564,16 @@ function tagBackupData(data, from, packet) {
     };
 };
 
+//Note (backup) data
+function noteBackupData(data, from, packet) {
+    let closestNode = kBucket.closestNode(data.receiverID);
+    if (_list.stored.includes(closestNode)) {
+        DB.storeNote(closestNode, data).then(_ => null).catch(e => console.error(e));
+        if (_list[closestNode] < floGlobals.sn_config.backupDepth && _nextNode.id !== from)
+            _nextNode.send(packet);
+    };
+};
+
 //Store (migrated) data
 function storeMigratedData(data) {
     let closestNode = kBucket.closestNode(data.receiverID);
@@ -590,6 +604,7 @@ function initiateRefresh() {
 function forwardToNextNode(mode, data) {
     var modeMap = {
         'TAG': TAG_BACKUP_DATA,
+        'NOTE': NOTE_BACKUP_DATA,
         'DATA': STORE_BACKUP_DATA
     };
     if (mode in modeMap && _nextNode.id)
@@ -648,7 +663,7 @@ dataMigration.process_del = async function(del_nodes, old_kb) {
         connectToAllActiveNodes().then(ws_connections => {
             let remaining = process_nodes.length;
             process_nodes.forEach(n => {
-                DB.getData(n, 0).then(result => {
+                DB.readAllData(n, 0).then(result => {
                     console.log(`START: Data migration for ${n}`);
                     //TODO: efficiently handle large number of data instead of loading all into memory
                     result.forEach(d => {
@@ -698,7 +713,7 @@ dataMigration.process_new = async function(new_nodes) {
         let process_nodes = _list.serving,
             remaining = process_nodes.length;
         process_nodes.forEach(n => {
-            DB.getData(n, 0).then(result => {
+            DB.readAllData(n, 0).then(result => {
                 //TODO: efficiently handle large number of data instead of loading all into memory
                 result.forEach(d => {
                     let closest = kBucket.closestNode(d.receiverID);

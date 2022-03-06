@@ -152,6 +152,8 @@ function checkIfRequestSatisfy(request, data) {
         return false;
     if (request.upperVectorClock && request.upperVectorClock < data.vectorClock)
         return false;
+    if (request.afterTime && request.afterTime > data.log_time)
+        return false;
     if (request.application !== data.application)
         return false;
     if (request.comment && request.comment !== data.comment)

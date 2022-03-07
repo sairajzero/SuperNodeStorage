@@ -19,13 +19,13 @@ function processIncomingData(data) {
             return reject(INVALID("Invalid Time"));
         else {
             let process;
-            if (request in data) //Request
+            if ('request' in data) //Request
                 process = processRequestFromUser(data.request);
-            else if (message in data) //Store data
+            else if ('message' in data) //Store data
                 process = processDataFromUser(data);
-            else if (tag in data) //Tag data
+            else if ('tag' in data) //Tag data
                 process = processTagFromUser(data);
-            else if (note in data)
+            else if ('note' in data)
                 process = processNoteFromUser(data);
             /*
             else if (data.edit)
@@ -63,18 +63,21 @@ function processDataFromUser(data) {
             return reject(INVALID("Invalid signature"));
 
         DB.addData(closeNode, {
-                vectorClock: `${Date.now()}_${data.senderID}`,
-                senderID: data.senderID,
-                receiverID: data.receiverID,
-                time: data.time,
-                application: data.application,
-                type: data.type,
-                message: data.message,
-                comment: data.comment,
-                sign: data.sign,
-                pubKey: data.pubKey
-            }).then(result => resolve([result, 'DATA']))
-            .catch(error => reject(error));
+            vectorClock: `${Date.now()}_${data.senderID}`,
+            senderID: data.senderID,
+            receiverID: data.receiverID,
+            time: data.time,
+            application: data.application,
+            type: data.type,
+            message: data.message,
+            comment: data.comment,
+            sign: data.sign,
+            pubKey: data.pubKey
+        }).then(rb => {
+            DB.getData(closeNode, rb.vectorClock)
+                .then(result => resolve([result[0], 'DATA', rb]))
+                .catch(error => reject(error))
+        }).catch(error => reject(error));
     });
 };
 
@@ -99,6 +102,9 @@ function processTagFromUser(data) {
         if (!_list.serving.includes(closeNode))
             return reject(INVALID("Incorrect Supernode"));
         DB.getData(closeNode, data.vectorClock).then(result => {
+            if (!result.length)
+                return reject(INVALID("Invalid vectorClock"));
+            result = result[0];
             if (!(result.application in floGlobals.appList))
                 return reject(INVALID("Application not authorised"));
             if (!floCrypto.validateAddr(data.requestorID) ||
@@ -110,9 +116,11 @@ function processTagFromUser(data) {
             if (!floCrypto.verifySign(hashcontent, data.sign, data.pubKey))
                 return reject(INVALID("Invalid signature"));
             let tag = ([null, undefined, ""].includes(data.tag) ? null : data.tag.toString());
-            DB.tagData(closeNode, data.vectorClock, tag, data.time, data.pubKey, data.sign)
-                .then(result => resolve([result, 'TAG']))
-                .catch(error => reject(error));
+            DB.tagData(closeNode, data.vectorClock, tag, data.time, data.pubKey, data.sign).then(rb => {
+                DB.getData(closeNode, data.vectorClock)
+                    .then(result => resolve([result[0], 'TAG', rb]))
+                    .catch(error => reject(error))
+            }).catch(error => reject(error))
         }).catch(error => reject(error))
     });
 };
@@ -125,6 +133,9 @@ function processNoteFromUser(data) {
         if (!_list.serving.includes(closeNode))
             return reject(INVALID("Incorrect Supernode"));
         DB.getData(closeNode, data.vectorClock).then(result => {
+            if (!result.length)
+                return reject(INVALID("Invalid vectorClock"));
+            result = result[0];
             if (result.application in floGlobals.appList && floGlobals.appList[result.application] === result.receiverID) {
                 if (!floGlobals.appSubAdmins[result.application].includes(data.requestorID) && result.receiverID !== data.requestorID)
                     return reject(INVALID("Invalid requestorID"));
@@ -136,9 +147,11 @@ function processNoteFromUser(data) {
             if (!floCrypto.verifySign(hashcontent, data.sign, data.pubKey))
                 return reject(INVALID("Invalid signature"));
             let note = ([null, undefined, ""].includes(data.note) ? null : data.note.toString());
-            DB.noteData(closeNode, data.vectorClock, note, data.time, data.pubKey, data.sign)
-                .then(result => resolve([result, 'NOTE']))
-                .catch(error => reject(error));
+            DB.noteData(closeNode, data.vectorClock, note, data.time, data.pubKey, data.sign).then(rb => {
+                DB.getData(closeNode, data.vectorClock)
+                    .then(result => resolve([result[0], 'NOTE', rb]))
+                    .catch(error => reject(error))
+            }).catch(error => reject(error))
         }).catch(error => reject(error))
     })
 }

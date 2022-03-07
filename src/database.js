@@ -227,7 +227,7 @@ function Database(user, password, dbname, host = 'localhost') {
     db.getData = function(snID, vectorClock) {
         return new Promise((resolve, reject) => {
             let statement = "SELECT * FROM _" + snID +
-                "WHERE " + H_struct.VECTOR_CLOCK + "=?";
+                " WHERE " + H_struct.VECTOR_CLOCK + "=?";
             db.query(statement, [vectorClock])
                 .then(result => resolve(result))
                 .catch(error => reject(error))
@@ -308,7 +308,8 @@ function Database(user, password, dbname, host = 'localhost') {
             //let statement = "SELECT " + attr.join(", ") + " FROM _" + snID +
             let statement = "SELECT * FROM _" + snID +
                 " WHERE " + conditionArr.join(" AND ") +
-                (request.mostRecent ? " LIMIT 1" : (" ORDER BY " + H_struct.VECTOR_CLOCK));
+                " ORDER BY " + (request.afterTime ? L_struct.LOG_TIME : H_struct.VECTOR_CLOCK) +
+                (request.mostRecent ? " DESC LIMIT 1" : "");
             db.query(statement)
                 .then(result => resolve(result))
                 .catch(error => reject(error));

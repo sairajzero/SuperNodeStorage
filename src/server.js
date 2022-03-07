@@ -40,7 +40,7 @@ module.exports = function Server(port, client, intra) {
                         refresher.countdown;
                         if (['DATA', 'TAG', 'NOTE'].includes(result[1]))
                             sendToLiveRequests(result[0]);
-                        intra.forwardToNextNode(result[1], result[0]);
+                        intra.forwardToNextNode(result[2], result[0]);
                     };
                 }).catch(error => {
                     if (error instanceof INVALID)
@@ -87,7 +87,7 @@ module.exports = function Server(port, client, intra) {
                             }
                         });
                 } catch (error) {
-                    console.error(error);
+                    //console.error(error);
                     if (floGlobals.sn_config.errorFeedback)
                         ws.send(`${INVALID_E_CODE}: Request not in JSON format`);
                 };

@@ -1,6 +1,6 @@
 'use strict';
 /* FLO Blockchain Operator to send/receive data from blockchain using API calls*/
-//version 2.2.1
+//version 2.2.1a
 (function(GLOBAL) {
     const floBlockchainAPI = GLOBAL.floBlockchainAPI = {
 
@@ -436,7 +436,8 @@
                         for (let i = 0; i < numToRead && filteredData.length < options.limit; i++) {
                             if (!response.items[i].confirmations) { //unconfirmed transactions
                                 unconfirmedCount++;
-                                numToRead++;
+                                if (numToRead < response.items[i].length)
+                                    numToRead++;
                                 continue;
                             }
                             if (options.pattern) {

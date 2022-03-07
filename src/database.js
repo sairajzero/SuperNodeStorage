@@ -298,6 +298,8 @@ function Database(user, password, dbname, host = 'localhost') {
             if (request.type)
                 conditionArr.push(`${H_struct.TYPE} = '${request.type}'`);
             if (request.senderID) {
+                if (typeof request.senderID === "string" && request.senderID.includes(','))
+                    request.senderID = request.senderID.split(',');
                 if (Array.isArray(request.senderID))
                     conditionArr.push(`${H_struct.SENDER_ID} IN ('${request.senderID.join("', '")}')`);
                 else

@@ -174,9 +174,10 @@ function checkIfRequestSatisfy(request, data) {
     if (request.type && request.type !== data.type)
         return false;
     if (request.senderID) {
-        if (Array.isArray(request.senderID) && !request.senderID.includes(data.senderID))
-            return false;
-        else if (request.senderID !== data.senderID)
+        if (Array.isArray(request.senderID)) {
+            if (!request.senderID.includes(data.senderID))
+                return false;
+        } else if (request.senderID !== data.senderID)
             return false;
     };
     return true;

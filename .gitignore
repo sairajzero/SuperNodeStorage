@@ -2,3 +2,6 @@
 /package-lock.json
 /args/config.json
 /args/param.json
+/log.txt
+/bash_start*
+*test*

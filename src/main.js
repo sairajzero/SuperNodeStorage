@@ -11,6 +11,7 @@ const client = require('./client');
 const Server = require('./server');
 
 var DB; //Container for Database object
+const INTERVAL_REFRESH_TIME = 1 * 60 * 60 * 1000; //1 hr
 
 function startNode() {
     //Set myPrivKey, myPubKey, myFloID
@@ -57,13 +58,19 @@ function loadBase() {
 const refreshData = {
     count: null,
     base: null,
+    refresh_instance: null,
     invoke(flag = true) {
         return new Promise((resolve, reject) => {
+            const self = this;
             console.info("Refresher processor has started at " + Date());
-            refreshBlockchainData(this.base, flag).then(result => {
+            if (self.refresh_instance !== null) {
+                clearInterval(self.refresh_instance);
+                self.refresh_instance = null;
+            }
+            refreshBlockchainData(self.base, flag).then(result => {
                 console.log(result);
-                this.count = floGlobals.sn_config.refreshDelay;
-                diskCleanUp(this.base)
+                self.count = floGlobals.sn_config.refreshDelay;
+                diskCleanUp(self.base)
                     .then(result => console.log(result))
                     .catch(warn => console.warn(warn))
                     .finally(_ => {
@@ -73,6 +80,8 @@ const refreshData = {
             }).catch(error => {
                 console.error(error);
                 reject(false);
+            }).finally(_ => {
+                self.refresh_instance = setInterval(() => refreshBlockchainData(self.base, true), INTERVAL_REFRESH_TIME)
             });
         });
     },

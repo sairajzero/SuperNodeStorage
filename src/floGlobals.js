@@ -3,14 +3,7 @@ const floGlobals = {
     //Required for all
     blockchain: "FLO",
 
-    //Required for blockchain API operators
-    apiURL: {
-        FLO: ['https://explorer.mediciland.com/', 'https://livenet.flocha.in/', 'https://flosight.duckdns.org/', 'http://livenet-explorer.floexperiments.com'],
-        FLO_TEST: ['https://testnet-flosight.duckdns.org', 'https://testnet.flocha.in/']
-    },
     SNStorageID: "FNaN9McoBAEFUjkRmNQRYLmBF8SpS7Tgfk",
-    //sendAmt: 0.001,
-    //fee: 0.0005,
 
     //Required for Supernode operations
     supernodes: {}, //each supnernode must be stored as floID : {uri:<uri>,pubKey:<publicKey>}

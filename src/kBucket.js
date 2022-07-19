@@ -1,5 +1,4 @@
 'use strict';
-require('./lib/BuildKBucket');
 
 module.exports = function K_Bucket(options = {}) {
 

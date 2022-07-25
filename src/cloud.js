@@ -1,6 +1,6 @@
 'use strict';
 
-module.exports = function K_Bucket(options = {}) {
+function K_Bucket(masterID, nodeList) {
 
     const decodeID = function(floID) {
         let k = bitjs.Base58.decode(floID);
@@ -13,16 +13,14 @@ module.exports = function K_Bucket(options = {}) {
         return nodeIdNewInt8Array;
     };
 
-    const list = options.list || Object.keys(floGlobals.supernodes);
-    const refID = options.masterID || floGlobals.SNStorageID;
     const _KB = new BuildKBucket({
-        localNodeId: decodeID(refID)
+        localNodeId: decodeID(masterID)
     });
-    list.forEach(id => _KB.add({
+    nodeList.forEach(id => _KB.add({
         id: decodeID(id),
         floID: id
     }));
-    const _CO = list.map(sn => [_KB.distance(decodeID(refID), decodeID(sn)), sn])
+    const _CO = nodeList.map(sn => [_KB.distance(decodeID(masterID), decodeID(sn)), sn])
         .sort((a, b) => a[0] - b[0])
         .map(a => a[1]);
 
@@ -94,3 +92,22 @@ module.exports = function K_Bucket(options = {}) {
         return (N == 1 ? cNodes[0] : cNodes);
     };
 }
+
+var kBucket;
+const cloud = module.exports = function Cloud(masterID, nodeList) {
+    kBucket = new K_Bucket(masterID, nodeList);
+}
+
+cloud.closestNode = (id, N = 1) => kBucket.closestNode(id, N);
+cloud.prevNode = (id, N = 1) => kBucket.prevNode(id, N);
+cloud.nextNode = (id, N = 1) => kBucket.nextNode(id, N);
+cloud.innerNodes = (id1, id2) => kBucket.innerNodes(id1, id2);
+cloud.outterNodes = (id1, id2) => kBucket.outterNodes(id1, id2);
+Object.defineProperties(cloud, {
+    kb: {
+        get: () => kBucket
+    },
+    order: {
+        get: () => kBucket.order
+    }
+});

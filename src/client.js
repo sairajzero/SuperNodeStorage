@@ -50,7 +50,7 @@ function processDataFromUser(data) {
     return new Promise((resolve, reject) => {
         if (!floCrypto.validateFloID(data.receiverID))
             return reject(INVALID("Invalid receiverID"));
-        let closeNode = kBucket.closestNode(data.receiverID);
+        let closeNode = cloud.closestNode(data.receiverID);
         if (!_list.serving.includes(closeNode))
             return reject(INVALID("Incorrect Supernode"));
         if (!floCrypto.validateFloID(data.senderID))
@@ -85,7 +85,7 @@ function processRequestFromUser(request) {
     return new Promise((resolve, reject) => {
         if (!floCrypto.validateFloID(request.receiverID))
             return reject(INVALID("Invalid receiverID"));
-        let closeNode = kBucket.closestNode(request.receiverID);
+        let closeNode = cloud.closestNode(request.receiverID);
         if (!_list.serving.includes(closeNode))
             return reject(INVALID("Incorrect Supernode"));
         DB.searchData(closeNode, request)
@@ -98,7 +98,7 @@ function processTagFromUser(data) {
     return new Promise((resolve, reject) => {
         if (!floCrypto.validateFloID(data.receiverID))
             return reject(INVALID("Invalid receiverID"));
-        let closeNode = kBucket.closestNode(data.receiverID);
+        let closeNode = cloud.closestNode(data.receiverID);
         if (!_list.serving.includes(closeNode))
             return reject(INVALID("Incorrect Supernode"));
         DB.getData(closeNode, data.vectorClock).then(result => {
@@ -129,7 +129,7 @@ function processNoteFromUser(data) {
     return new Promise((resolve, reject) => {
         if (!floCrypto.validateFloID(data.receiverID))
             return reject(INVALID("Invalid receiverID"));
-        let closeNode = kBucket.closestNode(data.receiverID);
+        let closeNode = cloud.closestNode(data.receiverID);
         if (!_list.serving.includes(closeNode))
             return reject(INVALID("Incorrect Supernode"));
         DB.getData(closeNode, data.vectorClock).then(result => {

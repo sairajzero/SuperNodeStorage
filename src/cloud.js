@@ -93,12 +93,59 @@ function K_Bucket(masterID, nodeList) {
     };
 }
 
+const blockchainPrefix = 0x23;
+
+function proxyID(address) {
+    if (!address)
+        return;
+    var bytes;
+    if (address.length == 34) { //legacy encoding
+        let decode = bitjs.Base58.decode(address);
+        bytes = decode.slice(0, decode.length - 4);
+        let checksum = decode.slice(decode.length - 4),
+            hash = Crypto.SHA256(Crypto.SHA256(bytes, {
+                asBytes: true
+            }), {
+                asBytes: true
+            });
+        hash[0] != checksum[0] || hash[1] != checksum[1] || hash[2] != checksum[2] || hash[3] != checksum[3] ?
+            bytes = undefined : bytes.shift();
+    } else if (address.length == 42 || address.length == 62) { //bech encoding
+        if (typeof coinjs !== 'function')
+            throw "library missing (lib_btc.js)";
+        let decode = coinjs.bech32_decode(address);
+        if (decode) {
+            bytes = decode.data;
+            bytes.shift();
+            bytes = coinjs.bech32_convert(bytes, 5, 8, false);
+            if (address.length == 62) //for long bech, aggregate once more to get 160 bit 
+                bytes = coinjs.bech32_convert(bytes, 5, 8, false);
+        }
+    } else if (address.length == 66) { //public key hex
+        bytes = ripemd160(Crypto.SHA256(Crypto.util.hexToBytes(address), {
+            asBytes: true
+        }));
+    }
+    if (!bytes)
+        throw "Invalid address: " + address;
+    else {
+        bytes.unshift(blockchainPrefix);
+        let hash = Crypto.SHA256(Crypto.SHA256(bytes, {
+            asBytes: true
+        }), {
+            asBytes: true
+        });
+        return bitjs.Base58.encode(bytes.concat(hash.slice(0, 4)));
+    }
+}
+
 var kBucket;
 const cloud = module.exports = function Cloud(masterID, nodeList) {
     kBucket = new K_Bucket(masterID, nodeList);
 }
 
-cloud.closestNode = (id, N = 1) => kBucket.closestNode(id, N);
+cloud.proxyID = (a) => proxyID(a);
+cloud.closestNode = (id, N = 1) => kBucket.closestNode(proxyID(id), N);
 cloud.prevNode = (id, N = 1) => kBucket.prevNode(id, N);
 cloud.nextNode = (id, N = 1) => kBucket.nextNode(id, N);
 cloud.innerNodes = (id1, id2) => kBucket.innerNodes(id1, id2);

@@ -1,4 +1,4 @@
-(function(EXPORTS) { //floCrypto v2.3.2
+(function(EXPORTS) { //floCrypto v2.3.2a
     /* FLO Crypto Operators */
     'use strict';
     const floCrypto = EXPORTS;
@@ -230,8 +230,6 @@
         } else if (address.length == 42 || address.length == 62) { //bech encoding
             if (bech === false)
                 return false;
-            else if (typeof btc_api !== "object")
-                throw "btc_api library missing (lib_btc.js)";
             let decode = coinjs.bech32_decode(address);
             if (!decode)
                 return false;

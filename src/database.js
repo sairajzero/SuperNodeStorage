@@ -43,6 +43,7 @@ const B_struct = {
 };
 
 const L_struct = {
+    PROXY_ID: "proxyID",
     STATUS: "status_n",
     LOG_TIME: "log_time"
 };
@@ -169,9 +170,9 @@ function Database(user, password, dbname, host = 'localhost') {
     db.createTable = function(snID) {
         return new Promise((resolve, reject) => {
             let statement = "CREATE TABLE IF NOT EXISTS _" + snID + " ( " +
-                H_struct.VECTOR_CLOCK + " VARCHAR(52) NOT NULL, " +
-                H_struct.SENDER_ID + " CHAR(34) NOT NULL, " +
-                H_struct.RECEIVER_ID + " CHAR(34) NOT NULL, " +
+                H_struct.VECTOR_CLOCK + " VARCHAR(88) NOT NULL, " +
+                H_struct.SENDER_ID + " VARCHAR(72) NOT NULL, " +
+                H_struct.RECEIVER_ID + " VARCHAR(72) NOT NULL, " +
                 H_struct.APPLICATION + " TINYTEXT NOT NULL, " +
                 H_struct.TYPE + " TINYTEXT, " +
                 B_struct.MESSAGE + " LONGTEXT NOT NULL, " +
@@ -179,6 +180,7 @@ function Database(user, password, dbname, host = 'localhost') {
                 B_struct.SIGNATURE + " VARCHAR(160) NOT NULL, " +
                 H_struct.PUB_KEY + " CHAR(66) NOT NULL, " +
                 B_struct.COMMENT + " TINYTEXT, " +
+                L_struct.PROXY_ID + " CHAR(34), " +
                 L_struct.STATUS + " INT NOT NULL, " +
                 L_struct.LOG_TIME + " BIGINT NOT NULL, " +
                 T_struct.TAG + " TINYTEXT, " +
@@ -210,6 +212,8 @@ function Database(user, password, dbname, host = 'localhost') {
         return new Promise((resolve, reject) => {
             data[L_struct.STATUS] = 1;
             data[L_struct.LOG_TIME] = Date.now();
+            let proxyID = cloud.proxyID(data[H_struct.RECEIVER_ID]);
+            data[L_struct.PROXY_ID] = proxyID !== data[H_struct.RECEIVER_ID] ? proxyID : null;
             let attr = Object.keys(H_struct).map(a => H_struct[a])
                 .concat(Object.keys(B_struct).map(a => B_struct[a]))
                 .concat(Object.keys(L_struct).map(a => L_struct[a]));
@@ -292,7 +296,7 @@ function Database(user, password, dbname, host = 'localhost') {
             if (request.afterTime)
                 conditionArr.push(`${L_struct.LOG_TIME} > ${request.afterTime}`);
             conditionArr.push(`${H_struct.APPLICATION} = '${request.application}'`);
-            conditionArr.push(`${H_struct.RECEIVER_ID} = '${request.receiverID}'`)
+            conditionArr.push(`IFNULL(${L_struct.PROXY_ID}, ${H_struct.RECEIVER_ID}) = '${request.receiverID}'`);
             if (request.comment)
                 conditionArr.push(`${B_struct.COMMENT} = '${request.comment}'`);
             if (request.type)

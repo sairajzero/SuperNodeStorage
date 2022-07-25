@@ -48,12 +48,12 @@ function processIncomingData(data) {
 
 function processDataFromUser(data) {
     return new Promise((resolve, reject) => {
-        if (!floCrypto.validateFloID(data.receiverID))
+        if (!floCrypto.validateAddr(data.receiverID))
             return reject(INVALID("Invalid receiverID"));
         let closeNode = cloud.closestNode(data.receiverID);
         if (!_list.serving.includes(closeNode))
             return reject(INVALID("Incorrect Supernode"));
-        if (!floCrypto.validateFloID(data.senderID))
+        if (!floCrypto.validateAddr(data.senderID))
             return reject(INVALID("Invalid senderID"));
         if (data.senderID !== floCrypto.getFloID(data.pubKey))
             return reject(INVALID("Invalid pubKey"));
@@ -83,7 +83,7 @@ function processDataFromUser(data) {
 
 function processRequestFromUser(request) {
     return new Promise((resolve, reject) => {
-        if (!floCrypto.validateFloID(request.receiverID))
+        if (!floCrypto.validateAddr(request.receiverID))
             return reject(INVALID("Invalid receiverID"));
         let closeNode = cloud.closestNode(request.receiverID);
         if (!_list.serving.includes(closeNode))
@@ -96,7 +96,7 @@ function processRequestFromUser(request) {
 
 function processTagFromUser(data) {
     return new Promise((resolve, reject) => {
-        if (!floCrypto.validateFloID(data.receiverID))
+        if (!floCrypto.validateAddr(data.receiverID))
             return reject(INVALID("Invalid receiverID"));
         let closeNode = cloud.closestNode(data.receiverID);
         if (!_list.serving.includes(closeNode))
@@ -107,7 +107,7 @@ function processTagFromUser(data) {
             result = result[0];
             if (!(result.application in floGlobals.appList))
                 return reject(INVALID("Application not authorised"));
-            if (!floCrypto.validateFloID(data.requestorID) ||
+            if (!floCrypto.validateAddr(data.requestorID) ||
                 !floGlobals.appSubAdmins[result.application].includes(data.requestorID))
                 return reject(INVALID("Invalid requestorID"));
             if (data.requestorID !== floCrypto.getFloID(data.pubKey))
@@ -127,7 +127,7 @@ function processTagFromUser(data) {
 
 function processNoteFromUser(data) {
     return new Promise((resolve, reject) => {
-        if (!floCrypto.validateFloID(data.receiverID))
+        if (!floCrypto.validateAddr(data.receiverID))
             return reject(INVALID("Invalid receiverID"));
         let closeNode = cloud.closestNode(data.receiverID);
         if (!_list.serving.includes(closeNode))

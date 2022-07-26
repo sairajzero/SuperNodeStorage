@@ -38,7 +38,7 @@ Edit the values in `args/config.json` as required.
 "sql_host": "<sql-host>"
 }
 ```
-- **private-key**: Private key of the cloud
+- **private-key**: Private key of the node
 - **port**: Port of the server to run on
 - **MySQL-username**: Username for MySQL
 - **MySQL-password**: Password for MySQL

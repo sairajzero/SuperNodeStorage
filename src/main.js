@@ -2,9 +2,9 @@ const config = require('../args/config.json');
 global.floGlobals = require("./floGlobals");
 require('./set_globals');
 require('./lib');
-const K_Bucket = require('./kBucket');
-require('./floCrypto');
-require('./floBlockchainAPI');
+global.cloud = require('./cloud');
+global.floCrypto = require('./floCrypto');
+global.floBlockchainAPI = require('./floBlockchainAPI');
 const Database = require("./database");
 const intra = require('./intra');
 const client = require('./client');
@@ -96,8 +96,8 @@ function refreshBlockchainData(base, flag) {
     return new Promise((resolve, reject) => {
         readSupernodeConfigFromAPI(base, flag).then(result => {
             console.log(result);
-            global.kBucket = new K_Bucket();
-            console.log("SNCO:", kBucket.order);
+            cloud(floGlobals.SNStorageID, Object.keys(floGlobals.supernodes));
+            console.log("NodeList (ordered):", cloud.order);
             readAppSubAdminListFromAPI(base)
                 .then(result => console.log(result))
                 .catch(warn => console.warn(warn))
@@ -252,7 +252,7 @@ function selfDiskMigration(node_change) {
                 DB.dropTable(n).then(_ => null).catch(e => console.error(e));
             DB.readAllData(n, 0).then(result => {
                 result.forEach(d => {
-                    let closest = kBucket.closestNode(d.receiverID);
+                    let closest = cloud.closestNode(d.receiverID);
                     if (closest !== n)
                         DB.deleteData(n, d.vectorClock).then(_ => null).catch(e => console.error(e));
                 });

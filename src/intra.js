@@ -177,7 +177,7 @@ function connectToActiveNode(snID, reverse = false) {
         connectToNode(snID)
             .then(ws => resolve(ws))
             .catch(error => {
-                var next = (reverse ? kBucket.prevNode(snID) : kBucket.nextNode(snID));
+                var next = (reverse ? cloud.prevNode(snID) : cloud.nextNode(snID));
                 connectToActiveNode(next, reverse)
                     .then(ws => resolve(ws))
                     .catch(error => reject(error));
@@ -190,7 +190,7 @@ function connectToNextNode(curNode = myFloID) {
     return new Promise((resolve, reject) => {
         if (curNode === myFloID && !(myFloID in floGlobals.supernodes))
             return reject(`This (${myFloID}) is not a supernode`);
-        let nextNodeID = kBucket.nextNode(curNode);
+        let nextNodeID = cloud.nextNode(curNode);
         if (nextNodeID === myFloID)
             return reject("No other node online");
         connectToNode(nextNodeID).then(ws => {
@@ -336,7 +336,7 @@ function processTaskFromSupernode(packet, ws) {
 //Acknowledge handshake
 function handshakeMid(id, ws) {
     if (_prevNode.id && _prevNode.id in floGlobals.supernodes) {
-        if (kBucket.innerNodes(_prevNode.id, myFloID).includes(id)) {
+        if (cloud.innerNodes(_prevNode.id, myFloID).includes(id)) {
             //close existing prev-node connection
             _prevNode.send(packet_.construct({
                 type: RECONNECT_NEXT_NODE
@@ -364,7 +364,7 @@ function handshakeMid(id, ws) {
     if (!_nextNode.id)
         reconnectNextNode();
     //Reorder storelist
-    let nodes = kBucket.innerNodes(_prevNode.id, myFloID).concat(myFloID),
+    let nodes = cloud.innerNodes(_prevNode.id, myFloID).concat(myFloID),
         req_sync = [],
         new_order = [];
     nodes.forEach(n => {
@@ -456,7 +456,7 @@ function reconnectNextNode() {
 function orderBackup(order) {
     let new_order = [],
         req_sync = [];
-    let cur_serve = kBucket.innerNodes(_prevNode.id, myFloID).concat(myFloID);
+    let cur_serve = cloud.innerNodes(_prevNode.id, myFloID).concat(myFloID);
     for (let n in order) {
         if (!cur_serve.includes(n) && order[n] + 1 !== _list[n] && n in floGlobals.supernodes) {
             if (order[n] >= floGlobals.sn_config.backupDepth)
@@ -546,7 +546,7 @@ function dataSyncIndication(snID, status, from) {
 
 //Store (backup) data
 function storeBackupData(data, from, packet) {
-    let closestNode = kBucket.closestNode(data.receiverID);
+    let closestNode = cloud.closestNode(data.receiverID);
     if (_list.stored.includes(closestNode)) {
         DB.storeData(closestNode, data).then(_ => null).catch(e => console.error(e));
         if (_list[closestNode] < floGlobals.sn_config.backupDepth && _nextNode.id !== from)
@@ -556,7 +556,7 @@ function storeBackupData(data, from, packet) {
 
 //Tag (backup) data
 function tagBackupData(data, from, packet) {
-    let closestNode = kBucket.closestNode(data.receiverID);
+    let closestNode = cloud.closestNode(data.receiverID);
     if (_list.stored.includes(closestNode)) {
         DB.storeTag(closestNode, data).then(_ => null).catch(e => console.error(e));
         if (_list[closestNode] < floGlobals.sn_config.backupDepth && _nextNode.id !== from)
@@ -566,7 +566,7 @@ function tagBackupData(data, from, packet) {
 
 //Note (backup) data
 function noteBackupData(data, from, packet) {
-    let closestNode = kBucket.closestNode(data.receiverID);
+    let closestNode = cloud.closestNode(data.receiverID);
     if (_list.stored.includes(closestNode)) {
         DB.storeNote(closestNode, data).then(_ => null).catch(e => console.error(e));
         if (_list[closestNode] < floGlobals.sn_config.backupDepth && _nextNode.id !== from)
@@ -576,7 +576,7 @@ function noteBackupData(data, from, packet) {
 
 //Store (migrated) data
 function storeMigratedData(data) {
-    let closestNode = kBucket.closestNode(data.receiverID);
+    let closestNode = cloud.closestNode(data.receiverID);
     if (_list.serving.includes(closestNode)) {
         DB.storeData(closestNode, data, true).then(_ => null).catch(e => console.error(e));
         _nextNode.send(packet_.construct({
@@ -588,7 +588,7 @@ function storeMigratedData(data) {
 
 //Delete (migrated) data
 function deleteMigratedData(data, from, packet) {
-    let closestNode = kBucket.closestNode(data.receiverID);
+    let closestNode = cloud.closestNode(data.receiverID);
     if (data.snID !== closestNode && _list.stored.includes(data.snID)) {
         DB.deleteData(data.snID, data.vectorClock).then(_ => null).catch(e => console.error(e));
         if (_list[data.snID] < floGlobals.sn_config.backupDepth && _nextNode.id !== from)
@@ -626,14 +626,14 @@ function dataMigration(node_change, flag) {
         (node_change[n] ? new_nodes : del_nodes).push(n);
     if (_prevNode.id && del_nodes.includes(_prevNode.id))
         _prevNode.close();
-    const old_kb = kBucket;
+    const old_kb = cloud.kb;
     setTimeout(() => {
         //reconnect next node if current next node is deleted
         if (_nextNode.id) {
             if (del_nodes.includes(_nextNode.id))
                 reconnectNextNode();
             else { //reconnect next node if there are newly added nodes in between self and current next node
-                let innerNodes = kBucket.innerNodes(myFloID, _nextNode.id);
+                let innerNodes = cloud.innerNodes(myFloID, _nextNode.id);
                 if (new_nodes.filter(n => innerNodes.includes(n)).length)
                     reconnectNextNode();
             };
@@ -667,7 +667,7 @@ dataMigration.process_del = async function(del_nodes, old_kb) {
                     console.log(`START: Data migration for ${n}`);
                     //TODO: efficiently handle large number of data instead of loading all into memory
                     result.forEach(d => {
-                        let closest = kBucket.closestNode(d.receiverID);
+                        let closest = cloud.closestNode(d.receiverID);
                         if (_list.serving.includes(closest)) {
                             DB.storeData(closest, d, true).then(_ => null).catch(e => console.error(e));
                             if (_nextNode.id)
@@ -716,7 +716,7 @@ dataMigration.process_new = async function(new_nodes) {
             DB.readAllData(n, 0).then(result => {
                 //TODO: efficiently handle large number of data instead of loading all into memory
                 result.forEach(d => {
-                    let closest = kBucket.closestNode(d.receiverID);
+                    let closest = cloud.closestNode(d.receiverID);
                     if (new_nodes.includes(closest)) {
                         if (_list.serving.includes(closest)) {
                             DB.storeData(closest, d, true).then(_ => null).catch(e => console.error(e));

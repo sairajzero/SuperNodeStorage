@@ -296,7 +296,7 @@ function Database(user, password, dbname, host = 'localhost') {
             if (request.afterTime)
                 conditionArr.push(`${L_struct.LOG_TIME} > ${request.afterTime}`);
             conditionArr.push(`${H_struct.APPLICATION} = '${request.application}'`);
-            conditionArr.push(`IFNULL(${L_struct.PROXY_ID}, ${H_struct.RECEIVER_ID}) = '${request.receiverID}'`);
+            conditionArr.push(`IFNULL(${L_struct.PROXY_ID}, ${H_struct.RECEIVER_ID}) = '${cloud.proxyID(request.receiverID)}'`);
             if (request.comment)
                 conditionArr.push(`${B_struct.COMMENT} = '${request.comment}'`);
             if (request.type)

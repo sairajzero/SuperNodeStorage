@@ -1,4 +1,4 @@
-(function(EXPORTS) { //floCrypto v2.3.2a
+(function(EXPORTS) { //floCrypto v2.3.2b
     /* FLO Crypto Operators */
     'use strict';
     const floCrypto = EXPORTS;
@@ -209,7 +209,7 @@
     }
 
     //Check if the given address (any blockchain) is valid or not
-    floCrypto.validateAddr = function(address, std = true, bech = false) {
+    floCrypto.validateAddr = function(address, std = true, bech = true) {
         if (address.length == 34) { //legacy or segwit encoding
             if (std === false)
                 return false;

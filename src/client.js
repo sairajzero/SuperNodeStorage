@@ -55,7 +55,7 @@ function processDataFromUser(data) {
             return reject(INVALID("Incorrect Supernode"));
         if (!floCrypto.validateAddr(data.senderID))
             return reject(INVALID("Invalid senderID"));
-        if (data.senderID !== floCrypto.getFloID(data.pubKey))
+        if (!floCrypto.verifyPubKey(data.pubKey, data.senderID))
             return reject(INVALID("Invalid pubKey"));
         let hashcontent = ["receiverID", "time", "application", "type", "message", "comment"]
             .map(d => data[d]).join("|");
@@ -110,7 +110,7 @@ function processTagFromUser(data) {
             if (!floCrypto.validateAddr(data.requestorID) ||
                 !floGlobals.appSubAdmins[result.application].includes(data.requestorID))
                 return reject(INVALID("Invalid requestorID"));
-            if (data.requestorID !== floCrypto.getFloID(data.pubKey))
+            if (!floCrypto.verifyPubKey(data.pubKey, data.requestorID))
                 return reject(INVALID("Invalid pubKey"));
             let hashcontent = ["time", "vectorClock", "tag"].map(d => data[d]).join("|");
             if (!floCrypto.verifySign(hashcontent, data.sign, data.pubKey))
@@ -141,7 +141,7 @@ function processNoteFromUser(data) {
                     return reject(INVALID("Invalid requestorID"));
             } else if (result.receiverID !== data.requestorID)
                 return reject(INVALID("Invalid requestorID"));
-            if (data.requestorID !== floCrypto.getFloID(data.pubKey))
+            if (!floCrypto.verifyPubKey(data.pubKey, data.requestorID))
                 return reject(INVALID("Invalid pubKey"));
             let hashcontent = ["time", "vectorClock", "note"].map(d => data[d]).join("|");
             if (!floCrypto.verifySign(hashcontent, data.sign, data.pubKey))
@@ -188,7 +188,7 @@ function processStatusFromUser(request, ws) {
         //Set user-online status
         if (!request.floID || !request.application || !request.sign || !request.pubKey || !request.time)
             return ws.send("Invalid request parameters");
-        if (request.floID !== floCrypto.getFloID(request.pubKey))
+        if (!floCrypto.verifyPubKey(request.pubKey, request.floID))
             return ws.send("Invalid pubKey");
         let hashcontent = ["time", "application", "floID"].map(d => request[d]).join("|");
         if (!floCrypto.verifySign(hashcontent, request.sign, request.pubKey))

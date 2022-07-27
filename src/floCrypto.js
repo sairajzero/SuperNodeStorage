@@ -1,4 +1,4 @@
-(function(EXPORTS) { //floCrypto v2.3.2b
+(function(EXPORTS) { //floCrypto v2.3.3
     /* FLO Crypto Operators */
     'use strict';
     const floCrypto = EXPORTS;
@@ -238,6 +238,35 @@
                 return true;
             else
                 return false;
+        } else //unknown length
+            return false;
+    }
+
+    floCrypto.verifyPubKey = function(pubKeyHex, address) {
+        let pub_hash = Crypto.util.bytesToHex(ripemd160(Crypto.SHA256(Crypto.util.hexToBytes(pubKeyHex), {
+            asBytes: true
+        })));
+        if (address.length == 34) { //legacy encoding
+            let decode = bitjs.Base58.decode(address);
+            var raw = decode.slice(0, decode.length - 4),
+                checksum = decode.slice(decode.length - 4);
+            var hash = Crypto.SHA256(Crypto.SHA256(raw, {
+                asBytes: true
+            }), {
+                asBytes: true
+            });
+            if (hash[0] != checksum[0] || hash[1] != checksum[1] || hash[2] != checksum[2] || hash[3] != checksum[3])
+                return false;
+            raw.shift();
+            return pub_hash === Crypto.util.bytesToHex(raw);
+        } else if (address.length == 42 || address.length == 62) { //bech encoding
+            let decode = coinjs.bech32_decode(address);
+            if (!decode)
+                return false;
+            var raw = decode.data;
+            raw.shift();
+            raw = coinjs.bech32_convert(raw, 5, 8, false);
+            return pub_hash === Crypto.util.bytesToHex(raw);
         } else //unknown length
             return false;
     }

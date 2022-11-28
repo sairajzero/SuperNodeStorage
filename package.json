@@ -10,7 +10,11 @@
     },
     "devDependencies": {},
     "scripts": {
-        "postinstall": "node args/post-install.js",
+        "postinstall": "node setup/post-install.js",
+        "help": "node setup/help.js",
+        "setup": "node setup/post-install.js",
+        "configure": "node setup/configure-settings.js",
+        "reset-password": "node setup/reset-password.js",
         "start": "node start.js"
     },
     "repository": {

@@ -12,3 +12,6 @@ try {
     for (let p in param)
         global[p] = param[p];
 }
+
+if (!process.argv.includes("--debug"))
+    global.console.debug = () => null;

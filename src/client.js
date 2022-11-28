@@ -1,6 +1,6 @@
 var DB, _list; //container for database and _list (stored n serving)
 
-global.INVALID = function(message) {
+global.INVALID = function (message) {
     if (!(this instanceof INVALID))
         return new INVALID(message);
     this.message = message;
@@ -39,7 +39,7 @@ function processIncomingData(data) {
                 console.debug(result);
                 resolve(result);
             }).catch(error => {
-                console.debug(error);
+                (error instanceof INVALID ? console.debug : console.error)(error);
                 reject(error);
             });
         };

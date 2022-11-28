@@ -1,4 +1,3 @@
-const config = require('../args/config.json');
 global.floGlobals = require("./floGlobals");
 require('./set_globals');
 require('./lib');
@@ -9,16 +8,33 @@ const Database = require("./database");
 const intra = require('./intra');
 const client = require('./client');
 const Server = require('./server');
+const keys = require("./keys");
 
 var DB; //Container for Database object
 const INTERVAL_REFRESH_TIME = 1 * 60 * 60 * 1000; //1 hr
 
 function startNode() {
-    //Set myPrivKey, myPubKey, myFloID
-    global.myPrivKey = config["privateKey"];
-    global.myPubKey = floCrypto.getPubKeyHex(config["privateKey"]);
-    global.myFloID = floCrypto.getFloID(config["privateKey"]);
-    console.info("Logged In as " + myFloID);
+
+    const config = require(`../args/config.json`);
+    let _pass;
+    for (let arg of process.argv)
+        if (/^-password=/i.test(arg))
+            _pass = arg.split(/=(.*)/s)[1];
+    try {
+        let _tmp = require(`../args/keys.json`);
+        _tmp = floCrypto.retrieveShamirSecret(_tmp);
+        if (!_pass) {
+            console.error('Password not entered!');
+            process.exit(1);
+        }
+        keys.node_priv = Crypto.AES.decrypt(_tmp, _pass);
+    } catch (error) {
+        console.error('Unable to load private key!');
+        process.exit(1);
+    }
+
+    console.info("Logged in as", keys.node_id);
+
     //DB connect
     Database(config["sql_user"], config["sql_pwd"], config["sql_db"], config["sql_host"]).then(db => {
         console.info("Connected to Database");
@@ -233,7 +249,7 @@ function diskCleanUp(base) {
             if (failed.length) {
                 console.error(JSON.stringify(failed));
                 let success = results.length - failed.length;
-                reject(`Disk clean-up process has failed at ${100 * success/results.length}%. (Success:${success}|Failed:${failed.count})`);
+                reject(`Disk clean-up process has failed at ${100 * success / results.length}%. (Success:${success}|Failed:${failed.count})`);
             } else
                 resolve("Disk clean-up process finished successfully (100%)");
         }).catch(error => reject(error));

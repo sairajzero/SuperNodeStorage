@@ -266,13 +266,11 @@ function selfDiskMigration(node_change) {
         disks.forEach(n => {
             if (node_change[n] === false)
                 DB.dropTable(n).then(_ => null).catch(e => console.error(e));
-            DB.readAllData(n, 0).then(result => {
-                result.forEach(d => {
-                    let closest = cloud.closestNode(d.receiverID);
-                    if (closest !== n)
-                        DB.deleteData(n, d.vectorClock).then(_ => null).catch(e => console.error(e));
-                });
-            }).catch(error => console.error(error));
+            DB.readAllDataStream(n, 0, d => {
+                let closest = cloud.closestNode(d.receiverID);
+                if (closest !== n)
+                    DB.deleteData(n, d.vectorClock).then(_ => null).catch(e => console.error(e));
+            }).then(result => console.debug(`Completed self-disk migration for ${n}`)).catch(error => console.error(error));
         });
     }).catch(error => console.error(error));
 };

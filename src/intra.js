@@ -517,25 +517,24 @@ orderBackup.requestData = function (req_sync, new_order) {
 function sendStoredData(lastlogs, node) {
     for (let n in lastlogs) {
         if (_list.stored.includes(n)) {
-            DB.readAllData(n, lastlogs[n]).then(result => {
-                node.send(packet_.construct({
-                    type: DATA_SYNC,
-                    id: n,
-                    status: true
-                }));
-                console.info(`START: ${n} data sync(send) to ${node.id}`);
-                //TODO: efficiently handle large number of data instead of loading all into memory
-                result.forEach(d => node.send(packet_.construct({
-                    type: STORE_BACKUP_DATA,
-                    data: d
-                })));
-                console.info(`END: ${n} data sync(send) to ${node.id}`);
-                node.send(packet_.construct({
+            node.send(packet_.construct({
+                type: DATA_SYNC,
+                id: n,
+                status: true
+            }));
+            console.info(`START: ${n} data sync(send) to ${node.id}`);
+            DB.readAllDataStream(n, lastlogs[n], d => node.send(packet_.construct({
+                type: STORE_BACKUP_DATA,
+                data: d
+            }))).then(result => console.info(`END: ${n} data sync(send) to ${node.id} (${result} records)`))
+                .catch(error => {
+                    console.info(`ERROR: ${n} data sync(send) to ${node.id}`)
+                    console.error(error);
+                }).finally(_ => node.send(packet_.construct({
                     type: DATA_SYNC,
                     id: n,
                     status: false
-                }));
-            }).catch(error => console.error(error));
+                })));
         };
     };
 };
@@ -664,29 +663,29 @@ dataMigration.process_del = async function (del_nodes, old_kb) {
         connectToAllActiveNodes().then(ws_connections => {
             let remaining = process_nodes.length;
             process_nodes.forEach(n => {
-                DB.readAllData(n, 0).then(result => {
-                    console.info(`START: Data migration for ${n}`);
-                    //TODO: efficiently handle large number of data instead of loading all into memory
-                    result.forEach(d => {
-                        let closest = cloud.closestNode(d.receiverID);
-                        if (_list.serving.includes(closest)) {
-                            DB.storeData(closest, d, true).then(_ => null).catch(e => console.error(e));
-                            if (_nextNode.id)
-                                _nextNode.send(packet_.construct({
-                                    type: STORE_BACKUP_DATA,
-                                    data: d
-                                }));
-                        } else
-                            ws_connections[closest].send(packet_.construct({
-                                type: STORE_MIGRATED_DATA,
+                console.info(`START: Data migration (del) for ${n}`);
+                DB.readAllDataStream(n, 0, d => {
+                    let closest = cloud.closestNode(d.receiverID);
+                    if (_list.serving.includes(closest)) {
+                        DB.storeData(closest, d, true).then(_ => null).catch(e => console.error(e));
+                        if (_nextNode.id)
+                            _nextNode.send(packet_.construct({
+                                type: STORE_BACKUP_DATA,
                                 data: d
                             }));
-                    });
-                    console.info(`END: Data migration for ${n}`);
+                    } else
+                        ws_connections[closest].send(packet_.construct({
+                            type: STORE_MIGRATED_DATA,
+                            data: d
+                        }));
+                }).then(result => {
+                    console.info(`END: Data migration (del) for ${n}`);
                     _list.delete(n);
                     DB.dropTable(n).then(_ => null).catch(e => console.error(e));
-                    remaining--;
-                }).catch(error => console.error(error));
+                }).catch(error => {
+                    console.info(`ERROR: Data migration (del) for ${n}`);
+                    console.error(error);
+                }).finally(_ => remaining--);
             });
             const interval = setInterval(() => {
                 if (remaining <= 0) {
@@ -714,37 +713,38 @@ dataMigration.process_new = async function (new_nodes) {
         let process_nodes = _list.serving,
             remaining = process_nodes.length;
         process_nodes.forEach(n => {
-            DB.readAllData(n, 0).then(result => {
-                //TODO: efficiently handle large number of data instead of loading all into memory
-                result.forEach(d => {
-                    let closest = cloud.closestNode(d.receiverID);
-                    if (new_nodes.includes(closest)) {
-                        if (_list.serving.includes(closest)) {
-                            DB.storeData(closest, d, true).then(_ => null).catch(e => console.error(e));
-                            if (_nextNode.id)
-                                _nextNode.send(packet_.construct({
-                                    type: STORE_BACKUP_DATA,
-                                    data: d
-                                }));
-                        } else
-                            ws_connections[closest].send(packet_.construct({
-                                type: STORE_MIGRATED_DATA,
-                                data: d
-                            }));
-                        DB.deleteData(n, d.vectorClock).then(_ => null).catch(e => console.error(e));
+            console.info(`START: Data migration (re-new) for ${n}`);
+            DB.readAllDataStream(n, 0, d => {
+                let closest = cloud.closestNode(d.receiverID);
+                if (new_nodes.includes(closest)) {
+                    if (_list.serving.includes(closest)) {
+                        DB.storeData(closest, d, true).then(_ => null).catch(e => console.error(e));
                         if (_nextNode.id)
                             _nextNode.send(packet_.construct({
-                                type: DELETE_MIGRATED_DATA,
-                                data: {
-                                    vectorClock: d.vectorClock,
-                                    receiverID: d.receiverID,
-                                    snID: n
-                                }
+                                type: STORE_BACKUP_DATA,
+                                data: d
                             }));
-                    };
-                });
-                remaining--;
-            }).catch(error => console.error(error));
+                    } else
+                        ws_connections[closest].send(packet_.construct({
+                            type: STORE_MIGRATED_DATA,
+                            data: d
+                        }));
+                    DB.deleteData(n, d.vectorClock).then(_ => null).catch(e => console.error(e));
+                    if (_nextNode.id)
+                        _nextNode.send(packet_.construct({
+                            type: DELETE_MIGRATED_DATA,
+                            data: {
+                                vectorClock: d.vectorClock,
+                                receiverID: d.receiverID,
+                                snID: n
+                            }
+                        }));
+                };
+            }).then(result => console.info(`END: Data migration (re-new) for ${n}`))
+                .catch(error => {
+                    console.info(`ERROR: Data migration (re-new) for ${n}`);
+                    console.error(error);
+                }).finally(_ => remaining--);
         });
         const interval = setInterval(() => {
             if (remaining <= 0) {

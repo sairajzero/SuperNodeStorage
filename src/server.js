@@ -1,11 +1,13 @@
 const http = require('http');
 const WebSocket = require('ws');
 const url = require('url');
+const intra = require('./intra');
+const client = require('./client');
 
 const INVALID_E_CODE = 400,
     INTERNAL_E_CODE = 500;
 
-module.exports = function Server(port, client, intra) {
+module.exports = function Server(port) {
 
     var refresher; //container for refresher
 
@@ -62,7 +64,7 @@ module.exports = function Server(port, client, intra) {
         server
     });
     wsServer.on('connection', function connection(ws) {
-        ws.onmessage = function(evt) {
+        ws.onmessage = function (evt) {
             let message = evt.data;
             if (message.startsWith(intra.SUPERNODE_INDICATOR))
                 intra.processTaskFromSupernode(message, ws);

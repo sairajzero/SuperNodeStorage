@@ -6,11 +6,10 @@ global.floCrypto = require('./floCrypto');
 global.floBlockchainAPI = require('./floBlockchainAPI');
 const Database = require("./database");
 const intra = require('./intra');
-const client = require('./client');
 const Server = require('./server');
 const keys = require("./keys");
 
-var DB; //Container for Database object
+const DB = Database.DB;
 const INTERVAL_REFRESH_TIME = 1 * 60 * 60 * 1000; //1 hr
 
 function startNode() {
@@ -36,13 +35,8 @@ function startNode() {
     console.info("Logged in as", keys.node_id);
 
     //DB connect
-    Database(config["sql_user"], config["sql_pwd"], config["sql_db"], config["sql_host"]).then(db => {
+    Database.init(config["sql_user"], config["sql_pwd"], config["sql_db"], config["sql_host"]).then(db => {
         console.info("Connected to Database");
-        DB = db;
-        //Set DB to client and intra scripts
-        intra.DB = DB;
-        client.DB = DB;
-        client._list = intra._list;
         loadBase().then(base => {
             console.log("Load Database successful");
             //Set base data from DB to floGlobals
@@ -54,7 +48,7 @@ function startNode() {
             refreshData.invoke(null)
                 .then(_ => intra.reconnectNextNode()).catch(_ => null);
             //Start Server
-            const server = new Server(config["port"], client, intra);
+            const server = new Server(config["port"]);
             server.refresher = refreshData;
             intra.refresher = refreshData;
         }).catch(error => console.error(error));
@@ -64,7 +58,7 @@ function startNode() {
 function loadBase() {
     return new Promise((resolve, reject) => {
         DB.createBase().then(result => {
-            DB.getBase(DB)
+            DB.getBase()
                 .then(result => resolve(result))
                 .catch(error => reject(error));
         }).catch(error => reject(error));
@@ -257,12 +251,7 @@ function diskCleanUp(base) {
 };
 
 function selfDiskMigration(node_change) {
-    DB.query("SHOW TABLES").then(result => {
-        const disks = [];
-        for (let i in result)
-            for (let j in result[i])
-                if (result[i][j].startsWith("_"))
-                    disks.push(result[i][j].split("_")[1]);
+    DB.listTable("SHOW TABLES").then(disks => {
         disks.forEach(n => {
             if (node_change[n] === false)
                 DB.dropTable(n).then(_ => null).catch(e => console.error(e));

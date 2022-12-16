@@ -1,4 +1,5 @@
-var DB, _list; //container for database and _list (stored n serving)
+const { DB } = require("./database");
+const { _list } = require("./intra");
 
 global.INVALID = function (message) {
     if (!(this instanceof INVALID))
@@ -272,11 +273,5 @@ module.exports = {
     checkIfRequestSatisfy,
     processRequestFromUser,
     processIncomingData,
-    processStatusFromUser,
-    set DB(db) {
-        DB = db;
-    },
-    set _list(list) {
-        _list = list;
-    }
+    processStatusFromUser
 };

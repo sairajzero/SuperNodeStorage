@@ -96,6 +96,7 @@ DB.setLastTx = function (id, n) {
 
 DB.setConfig = function (name, value) {
     return new Promise((resolve, reject) => {
+        value = JSON.stringify(value);
         let statement = "INSERT INTO Configs (NAME, VAL) VALUES (?, ?)" +
             " ON DUPLICATE KEY UPDATE VAL=?";
         queryResolve(statement, [name, value, value])
@@ -144,6 +145,17 @@ DB.setSubAdmin = function (appName, subAdmins) {
     });
 };
 
+DB.setTrustedIDs = function (appName, trustedIDs) {
+    return new Promise((resolve, reject) => {
+        let statement = "UPDATE Applications" +
+            " SET TRUSTED_IDS=?" +
+            " WHERE APP_NAME=?";
+        queryResolve(statement, [trustedIDs.join(","), appName])
+            .then(result => resolve(result))
+            .catch(error => reject(error));
+    });
+}
+
 DB.addApp = function (appName, adminID) {
     return new Promise((resolve, reject) => {
         let statement = "INSERT INTO Applications (APP_NAME, ADMIN_ID) VALUES (?, ?)" +
@@ -171,9 +183,10 @@ DB.getBase = function () {
             let tmp = Object.fromEntries(tables.map((t, i) => [t, result[i]]));
             result = {};
             result.lastTx = Object.fromEntries(tmp.LastTxs.map(a => [a.ID, a.N]));
-            result.sn_config = Object.fromEntries(tmp.Configs.map(a => [a.NAME, a.VAL]));
+            result.sn_config = Object.fromEntries(tmp.Configs.map(a => [a.NAME, JSON.parse(a.VAL)]));
             result.appList = Object.fromEntries(tmp.Applications.map(a => [a.APP_NAME, a.ADMIN_ID]));
             result.appSubAdmins = Object.fromEntries(tmp.Applications.map(a => [a.APP_NAME, a.SUB_ADMINS ? a.SUB_ADMINS.split(",") : []]));
+            result.appTrustedIDs = Object.fromEntries(tmp.Applications.map(a => [a.APP_NAME, a.TRUSTED_IDS ? a.TRUSTED_IDS.split(",") : []]));
             result.supernodes = Object.fromEntries(tmp.SuperNodes.map(a => [a.FLO_ID, {
                 pubKey: a.PUB_KEY,
                 uri: a.URI

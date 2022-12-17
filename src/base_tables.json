@@ -18,7 +18,8 @@
     "Applications": {
         "APP_NAME": "VARCHAR(64) NOT NULL",
         "ADMIN_ID": "CHAR(34) NOT NULL",
-        "SUB_ADMINS": "VARCHAR(3500)",
+        "SUB_ADMINS": "TEXT",
+        "TRUSTED_IDS": "TEXT",
         "PRIMARY": "KEY (APP_NAME)"
     }
 }

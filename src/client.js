@@ -109,7 +109,8 @@ function processTagFromUser(data) {
             if (!(result.application in floGlobals.appList))
                 return reject(INVALID("Application not authorised"));
             if (!floCrypto.validateAddr(data.requestorID) ||
-                !floGlobals.appSubAdmins[result.application].includes(data.requestorID))
+                (!floGlobals.appSubAdmins[result.application].includes(data.requestorID)
+                    && !floGlobals.appTrustedIDs[result.application].includes(data.requestorID)))
                 return reject(INVALID("Invalid requestorID"));
             if (!floCrypto.verifyPubKey(data.pubKey, data.requestorID))
                 return reject(INVALID("Invalid pubKey"));

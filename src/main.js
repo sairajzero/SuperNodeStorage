@@ -44,6 +44,7 @@ function startNode() {
             floGlobals.sn_config = base.sn_config;
             floGlobals.appList = base.appList;
             floGlobals.appSubAdmins = base.appSubAdmins;
+            floGlobals.appTrustedIDs = base.appTrustedIDs;
             refreshData.base = base;
             refreshData.invoke(null)
                 .then(_ => intra.reconnectNextNode()).catch(_ => null);
@@ -124,7 +125,8 @@ function readSupernodeConfigFromAPI(base, flag) {
             pattern: "SuperNodeStorage"
         }).then(result => {
             let promises = [],
-                node_change = {};
+                node_change = {},
+                node_update = new Set();
             result.data.reverse().forEach(data => {
                 var content = JSON.parse(data).SuperNodeStorage;
                 if (content.removeNodes)
@@ -148,6 +150,12 @@ function readSupernodeConfigFromAPI(base, flag) {
                         else
                             node_change[sn] = true;
                     };
+                if (content.updateNodes)
+                    for (let sn in content.updateNodes) {
+                        promises.push(DB.updateSuperNode(sn, content.updateNodes[sn]));
+                        base.supernodes[sn].uri = content.updateNodes[sn];
+                        node_update.add(sn);
+                    }
                 if (content.config)
                     for (let c in content.config) {
                         promises.push(DB.setConfig(c, content.config[c]));
@@ -171,9 +179,11 @@ function readSupernodeConfigFromAPI(base, flag) {
                     console.warn("Some data might not have been saved in database correctly");
             });
             //Process data migration if nodes are changed
-            if (Object.keys(node_change).length) {
-                if (flag === null)
-                    selfDiskMigration(node_change); //When node starts for the 1st time after been inactive, but migration has already taken place.
+            if (Object.keys(node_change).length || node_update.size) {
+                if (flag === null) {
+                    if (Object.keys(node_change).length)
+                        selfDiskMigration(node_change); //When node starts for the 1st time after been inactive, but migration has already taken place.
+                }
                 else
                     intra.dataMigration(node_change, flag);
             }
@@ -193,18 +203,25 @@ function readAppSubAdminListFromAPI(base) {
                 sentOnly: true,
                 pattern: app
             }).then(result => {
-                let subAdmins = new Set(base.appSubAdmins[app]);
+                let subAdmins = new Set(base.appSubAdmins[app]),
+                    trustedIDs = new Set(base.appTrustedIDs[app]);
                 result.data.reverse().forEach(data => {
                     let content = JSON.parse(data)[app];
                     if (Array.isArray(content.removeSubAdmin))
                         content.removeSubAdmin.forEach(sa => subAdmins.delete(sa));
                     if (Array.isArray(content.addSubAdmin))
                         content.addSubAdmin.forEach(sa => subAdmins.add(sa));
+                    if (Array.isArray(content.removeTrustedID))
+                        content.removeTrustedID.forEach(sa => trustedIDs.delete(sa));
+                    if (Array.isArray(content.addTrustedID))
+                        content.addTrustedID.forEach(sa => trustedIDs.add(sa));
                 });
                 base.appSubAdmins[app] = Array.from(subAdmins);
+                base.appTrustedIDs[app] = Array.from(trustedIDs);
                 Promise.allSettled([
                     DB.setLastTx(base.appList[app], result.totalTxs),
-                    DB.setSubAdmin(app, base.appSubAdmins[app])
+                    DB.setSubAdmin(app, base.appSubAdmins[app]),
+                    DB.setTrustedIDs(app, base.appTrustedIDs[app])
                 ]).then(results => {
                     if (results.reduce((a, r) => r.status === "rejected" ? ++a : a, 0))
                         console.warn(`SubAdmin list for app(${app}) might not have been saved in database`);

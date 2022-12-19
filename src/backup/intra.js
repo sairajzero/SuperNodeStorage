@@ -1,28 +1,16 @@
 'use strict';
 const WebSocket = require('ws');
-const keys = require('./keys');
+const { DB } = require('../database');
+const keys = require('../keys');
+const TYPE_ = require('./message_types.json');
+const sync = require('./sync');
 
 //CONSTANTS
 const SUPERNODE_INDICATOR = '$',
-    //Message type
-    ORDER_BACKUP = "orderBackup",
-    STORE_BACKUP_DATA = "backupData",
-    STORE_MIGRATED_DATA = "migratedData",
-    DELETE_MIGRATED_DATA = "migratedDelete",
-    //DELETE_BACKUP_DATA = "backupDelete",
-    TAG_BACKUP_DATA = "backupTag",
-    NOTE_BACKUP_DATA = "backupNote",
-    //EDIT_BACKUP_DATA = "backupEdit",
-    INITIATE_REFRESH = "initiateRefresh",
-    DATA_REQUEST = "dataRequest",
-    DATA_SYNC = "dataSync",
-    BACKUP_HANDSHAKE_INIT = "handshakeInitate",
-    BACKUP_HANDSHAKE_END = "handshakeEnd",
-    RECONNECT_NEXT_NODE = "reconnectNextNode",
     RETRY_TIMEOUT = 5 * 60 * 1000, //5 mins
     MIGRATE_WAIT_DELAY = 5 * 60 * 1000; //5 mins
 
-var DB, refresher; //container for database and refresher
+var refresher; //container for and refresher
 
 //List of node backups stored
 const _list = {};
@@ -197,7 +185,7 @@ function connectToNextNode(curNode = keys.node_id) {
         connectToNode(nextNodeID).then(ws => {
             _nextNode.set(nextNodeID, ws);
             _nextNode.send(packet_.construct({
-                type: BACKUP_HANDSHAKE_INIT
+                type_: TYPE_.BACKUP_HANDSHAKE_INIT
             }));
             resolve("BACKUP_HANDSHAKE_INIT: " + nextNodeID);
         }).catch(error => {
@@ -245,24 +233,25 @@ function processTaskFromNextNode(packet) {
     } = packet_.parse(packet);
     if (message) {
         message.forEach(task => {
-            switch (task.type) {
-                case RECONNECT_NEXT_NODE: //Triggered when a node inbetween is available
-                    reconnectNextNode();
-                    break;
-                case BACKUP_HANDSHAKE_END:
-                    handshakeEnd();
-                    break;
-                case DATA_REQUEST:
-                    sendStoredData(task.nodes, _nextNode);
-                    break;
-                case DATA_SYNC:
-                    dataSyncIndication(task.id, task.status, from);
-                    break;
-                case STORE_BACKUP_DATA:
-                    storeBackupData(task.data, from, packet);
-                    break;
+            switch (task.type_) {
+                case TYPE_.RECONNECT_NEXT_NODE: //Triggered when a node inbetween is available
+                    reconnectNextNode(); break;
+                case TYPE_.BACKUP_HANDSHAKE_END:
+                    handshakeEnd(); break;
+                case TYPE_.REQ_HASH:
+                    sync.sendBlockHashes(task.node_i, _nextNode); break;
+                case TYPE_.RES_HASH:
+                    sync.checkBlockHash(task.node_i, task.block_n, task.hash); break;
+                case TYPE_.VAL_LAST_BLK:
+                    sync.setLastBlock(task.node_i, task.block_n); break;
+                case TYPE_.REQ_BLOCK:
+                    sync.sendBlockData(task.node_i, task.block_n, _nextNode); break;
+                case TYPE_.INDICATE_BLK:
+                    sync.syncIndicator(task.node_i, task.block_n, task.status, from); break;
+                case TYPE_.STORE_BACKUP_DATA:
+                    storeBackupData(task.data, from, packet); break;
                 default:
-                    console.warn("Invalid task type:" + task.type + "from next-node");
+                    console.warn("Invalid task type_:" + task.type_ + "from next-node");
             };
         });
     };
@@ -277,30 +266,29 @@ function processTaskFromPrevNode(packet) {
     } = packet_.parse(packet);
     if (message) {
         message.forEach(task => {
-            switch (task.type) {
-                case ORDER_BACKUP:
-                    orderBackup(task.order);
-                    break;
-                case STORE_BACKUP_DATA:
-                    storeBackupData(task.data, from, packet);
-                    break;
-                case TAG_BACKUP_DATA:
-                    tagBackupData(task.data, from, packet);
-                    break;
-                case NOTE_BACKUP_DATA:
-                    noteBackupData(task.data, from, packet);
-                    break;
-                case DATA_REQUEST:
-                    sendStoredData(task.nodes, _prevNode);
-                    break;
-                case DATA_SYNC:
-                    dataSyncIndication(task.id, task.status, from);
-                    break;
-                case DELETE_MIGRATED_DATA:
-                    deleteMigratedData(task.data, from, packet);
-                    break;
+            switch (task.type_) {
+                case TYPE_.ORDER_BACKUP:
+                    orderBackup(task.order); break;
+                case TYPE_.STORE_BACKUP_DATA:
+                    storeBackupData(task.data, from, packet); break;
+                case TYPE_.TAG_BACKUP_DATA:
+                    tagBackupData(task.data, from, packet); break;
+                case TYPE_.NOTE_BACKUP_DATA:
+                    noteBackupData(task.data, from, packet); break;
+                case TYPE_.REQ_HASH:
+                    sync.sendBlockHashes(task.node_i, _nextNode); break;
+                case TYPE_.RES_HASH:
+                    sync.checkBlockHash(task.node_i, task.block_n, task.hash); break;
+                case TYPE_.VAL_LAST_BLK:
+                    sync.setLastBlock(task.node_i, task.block_n); break;
+                case TYPE_.REQ_BLOCK:
+                    sync.sendBlockData(task.node_i, task.block_n, _nextNode); break;
+                case TYPE_.INDICATE_BLK:
+                    sync.syncIndicator(task.node_i, task.block_n, task.status, from); break;
+                case TYPE_.DELETE_MIGRATED_DATA:
+                    deleteMigratedData(task.data, from, packet); break;
                 default:
-                    console.warn("Invalid task type:" + task.type + "from prev-node");
+                    console.warn("Invalid task type_:" + task.type_ + "from prev-node");
             };
         });
     };
@@ -315,18 +303,15 @@ function processTaskFromSupernode(packet, ws) {
     } = packet_.parse(packet);
     if (message) {
         message.forEach(task => {
-            switch (task.type) {
-                case BACKUP_HANDSHAKE_INIT:
-                    handshakeMid(from, ws);
-                    break;
-                case STORE_MIGRATED_DATA:
-                    storeMigratedData(task.data);
-                    break;
-                case INITIATE_REFRESH:
-                    initiateRefresh();
-                    break;
+            switch (task.type_) {
+                case TYPE_.BACKUP_HANDSHAKE_INIT:
+                    handshakeMid(from, ws); break;
+                case TYPE_.STORE_MIGRATED_DATA:
+                    storeMigratedData(task.data); break;
+                case TYPE_.INITIATE_REFRESH:
+                    initiateRefresh(); break;
                 default:
-                    console.warn("Invalid task type:" + task.type + "from super-node");
+                    console.warn("Invalid task type_:" + task.type_ + "from super-node");
             };
         });
     };
@@ -340,18 +325,18 @@ function handshakeMid(id, ws) {
         if (cloud.innerNodes(_prevNode.id, keys.node_id).includes(id)) {
             //close existing prev-node connection
             _prevNode.send(packet_.construct({
-                type: RECONNECT_NEXT_NODE
+                type_: TYPE_.RECONNECT_NEXT_NODE
             }));
             _prevNode.close();
             //set the new prev-node connection
             _prevNode.set(id, ws);
             _prevNode.send(packet_.construct({
-                type: BACKUP_HANDSHAKE_END
+                type_: TYPE_.BACKUP_HANDSHAKE_END
             }));
         } else {
             //Incorrect order, existing prev-node is already after the incoming node
             ws.send(packet_.construct({
-                type: RECONNECT_NEXT_NODE
+                type_: TYPE_.RECONNECT_NEXT_NODE
             }));
             return;
         };
@@ -359,16 +344,16 @@ function handshakeMid(id, ws) {
         //set the new prev-node connection
         _prevNode.set(id, ws);
         _prevNode.send(packet_.construct({
-            type: BACKUP_HANDSHAKE_END
+            type_: TYPE_.BACKUP_HANDSHAKE_END
         }));
     };
     if (!_nextNode.id)
         reconnectNextNode();
     //Reorder storelist
-    let nodes = cloud.innerNodes(_prevNode.id, keys.node_id).concat(keys.node_id),
+    let nodes_inbtw = cloud.innerNodes(_prevNode.id, keys.node_id).concat(keys.node_id),
         req_sync = [],
         new_order = [];
-    nodes.forEach(n => {
+    nodes_inbtw.forEach(n => {
         switch (_list[n]) {
             case 0: //Do nothing
                 break;
@@ -379,57 +364,22 @@ function handshakeMid(id, ws) {
                 new_order.push(n);
         };
     });
-    if (!req_sync.length && !new_order.length)
-        return; //No order change and no need for any data sync
-    else
-        handshakeMid.requestData(req_sync, new_order);
-};
-
-handshakeMid.requestData = function (req_sync, new_order) {
-    if (handshakeMid.timeout) {
-        clearTimeout(handshakeMid.timeout);
-        delete handshakeMid.timeout;
-    };
-    Promise.allSettled(req_sync.map(n => DB.createGetLastLog(n))).then(result => {
-        let tasks = [],
-            lastlogs = {},
-            failed = [],
-            order = [],
-            failed_order = [];
-
-        req_sync.forEach((s, i) => {
-            if (result[i].status === "fulfilled")
-                lastlogs[s] = result[i].value;
-            else
-                failed.push(s);
-        });
-        if (Object.keys(lastlogs).length)
-            tasks.push({
-                type: DATA_REQUEST,
-                nodes: lastlogs
-            });
-        new_order.forEach(n => {
-            if (failed.includes(n))
-                failed_order.push(n);
-            else
-                order.push(n);
-        });
-        if (order.length)
-            tasks.push({
-                type: ORDER_BACKUP,
-                order: _list.get(order)
-            });
-        _nextNode.send(packet_.construct(tasks));
-        if (failed.length)
-            handshakeMid.timeout = setTimeout(_ => handshakeMid.requestData(failed, failed_order), RETRY_TIMEOUT);
-    });
+    if (req_sync.length)
+        req_sync.forEach(node_i => sync.requestDataSync(node_i, _nextNode));
+    if (new_order.length) {
+        let synced_list = new_order.filter(n => !req_sync.includes(n)); //send order only for synced disks
+        _nextNode.send(packet_.construct({
+            type_: TYPE_.ORDER_BACKUP,
+            order: _list.get(synced_list)
+        }));
+    }
 };
 
 //Complete handshake
 function handshakeEnd() {
     console.log("Backup connected: " + _nextNode.id);
     _nextNode.send(packet_.construct({
-        type: ORDER_BACKUP,
+        type_: TYPE_.ORDER_BACKUP,
         order: _list.get()
     }));
 };
@@ -472,76 +422,15 @@ function orderBackup(order) {
             };
         };
     };
-    if (!req_sync.length && !new_order.length)
-        return; //No order change and no need for any data sync
-    else
-        orderBackup.requestData(req_sync, new_order);
-};
-
-orderBackup.requestData = function (req_sync, new_order) {
-    Promise.allSettled(req_sync.map(n => DB.createGetLastLog(n))).then(result => {
-        let
-            lastlogs = {},
-            failed = [],
-            order = [],
-            failed_order = [];
-
-        req_sync.forEach((s, i) => {
-            if (result[i].status === "fulfilled")
-                lastlogs[s] = result[i].value;
-            else
-                failed.push(s);
-        });
-        if (Object.keys(lastlogs).length)
-            _prevNode.send(packet_.construct({
-                type: DATA_REQUEST,
-                nodes: lastlogs
-            }));
-        new_order.forEach(n => {
-            if (failed.includes(n))
-                failed_order.push(n);
-            else
-                order.push(n);
-        });
-        if (order.length) //TODO: maybe should wait for sync to finish?
-            _nextNode.send(packet_.construct({
-                type: ORDER_BACKUP,
-                order: _list.get(order)
-            }));
-        if (failed.length)
-            setTimeout(_ => orderBackup.requestData(failed, failed_order), RETRY_TIMEOUT);
-    });
-};
-
-//Send stored data
-function sendStoredData(lastlogs, node) {
-    for (let n in lastlogs) {
-        if (_list.stored.includes(n)) {
-            node.send(packet_.construct({
-                type: DATA_SYNC,
-                id: n,
-                status: true
-            }));
-            console.info(`START: ${n} data sync(send) to ${node.id}`);
-            DB.readAllDataStream(n, lastlogs[n], d => node.send(packet_.construct({
-                type: STORE_BACKUP_DATA,
-                data: d
-            }))).then(result => console.info(`END: ${n} data sync(send) to ${node.id} (${result} records)`))
-                .catch(error => {
-                    console.info(`ERROR: ${n} data sync(send) to ${node.id}`)
-                    console.error(error);
-                }).finally(_ => node.send(packet_.construct({
-                    type: DATA_SYNC,
-                    id: n,
-                    status: false
-                })));
-        };
-    };
-};
-
-//Indicate sync of data
-function dataSyncIndication(snID, status, from) {
-    console.info(`${status ? 'START' : 'END'}: ${snID} data sync(receive) form ${from}`);
+    if (req_sync.length)
+        req_sync.forEach(node_i => sync.requestDataSync(node_i, _prevNode));
+    if (new_order.length) {
+        let synced_list = new_order.filter(n => !req_sync.includes(n)); //send order only for synced disks
+        _nextNode.send(packet_.construct({
+            type_: TYPE_.ORDER_BACKUP,
+            order: _list.get(synced_list)
+        }));
+    }
 };
 
 //Store (backup) data
@@ -580,7 +469,7 @@ function storeMigratedData(data) {
     if (_list.serving.includes(closestNode)) {
         DB.storeData(closestNode, data, true).then(_ => null).catch(e => console.error(e));
         _nextNode.send(packet_.construct({
-            type: STORE_BACKUP_DATA,
+            type_: TYPE_.STORE_BACKUP_DATA,
             data: data
         }));
     };
@@ -603,23 +492,23 @@ function initiateRefresh() {
 //Forward incoming to next node
 function forwardToNextNode(mode, data) {
     var modeMap = {
-        'TAG': TAG_BACKUP_DATA,
-        'NOTE': NOTE_BACKUP_DATA,
-        'DATA': STORE_BACKUP_DATA
+        'TAG': TYPE_.TAG_BACKUP_DATA,
+        'NOTE': TYPE_.NOTE_BACKUP_DATA,
+        'DATA': TYPE_.STORE_BACKUP_DATA
     };
     if (mode in modeMap && _nextNode.id)
         _nextNode.send(packet_.construct({
-            type: modeMap[mode],
+            type_: modeMap[mode],
             data: data
         }));
 };
 
 //Data migration processor
 function dataMigration(node_change, flag) {
+    if (flag) dataMigration.intimateAllNodes(); //Initmate All nodes to call refresher
     if (!Object.keys(node_change).length)
         return;
     console.log("Node list changed! Data migration required", node_change);
-    if (flag) dataMigration.intimateAllNodes(); //Initmate All nodes to call refresher
     let new_nodes = [],
         del_nodes = [];
     for (let n in node_change)
@@ -670,12 +559,12 @@ dataMigration.process_del = async function (del_nodes, old_kb) {
                         DB.storeData(closest, d, true).then(_ => null).catch(e => console.error(e));
                         if (_nextNode.id)
                             _nextNode.send(packet_.construct({
-                                type: STORE_BACKUP_DATA,
+                                type_: TYPE_.STORE_BACKUP_DATA,
                                 data: d
                             }));
                     } else
                         ws_connections[closest].send(packet_.construct({
-                            type: STORE_MIGRATED_DATA,
+                            type_: TYPE_.STORE_MIGRATED_DATA,
                             data: d
                         }));
                 }).then(result => {
@@ -721,18 +610,18 @@ dataMigration.process_new = async function (new_nodes) {
                         DB.storeData(closest, d, true).then(_ => null).catch(e => console.error(e));
                         if (_nextNode.id)
                             _nextNode.send(packet_.construct({
-                                type: STORE_BACKUP_DATA,
+                                type_: TYPE_.STORE_BACKUP_DATA,
                                 data: d
                             }));
                     } else
                         ws_connections[closest].send(packet_.construct({
-                            type: STORE_MIGRATED_DATA,
+                            type_: TYPE_.STORE_MIGRATED_DATA,
                             data: d
                         }));
                     DB.deleteData(n, d.vectorClock).then(_ => null).catch(e => console.error(e));
                     if (_nextNode.id)
                         _nextNode.send(packet_.construct({
-                            type: DELETE_MIGRATED_DATA,
+                            type_: TYPE_.DELETE_MIGRATED_DATA,
                             data: {
                                 vectorClock: d.vectorClock,
                                 receiverID: d.receiverID,
@@ -760,7 +649,7 @@ dataMigration.process_new = async function (new_nodes) {
 dataMigration.intimateAllNodes = function () {
     connectToAliveNodes().then(ws_connections => {
         let packet = packet_.construct({
-            type: INITIATE_REFRESH
+            type_: TYPE_.INITIATE_REFRESH
         });
         for (let n in ws_connections)
             if (ws_connections[n]) {
@@ -783,9 +672,9 @@ module.exports = {
     logInterval,
     SUPERNODE_INDICATOR,
     _list,
-    set DB(db) {
-        DB = db;
-    },
+    _nextNode,
+    _prevNode,
+    packet_,
     set refresher(r) {
         refresher = r;
     }

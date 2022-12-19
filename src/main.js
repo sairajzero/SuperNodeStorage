@@ -5,7 +5,7 @@ global.cloud = require('./cloud');
 global.floCrypto = require('./floCrypto');
 global.floBlockchainAPI = require('./floBlockchainAPI');
 const Database = require("./database");
-const intra = require('./intra');
+const intra = require('./backup/intra');
 const Server = require('./server');
 const keys = require("./keys");
 

@@ -1,5 +1,5 @@
 const { DB } = require("./database");
-const { _list } = require("./intra");
+const { _list } = require("./backup/intra");
 
 global.INVALID = function (message) {
     if (!(this instanceof INVALID))

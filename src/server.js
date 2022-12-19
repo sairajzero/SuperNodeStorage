@@ -1,7 +1,7 @@
 const http = require('http');
 const WebSocket = require('ws');
 const url = require('url');
-const intra = require('./intra');
+const intra = require('./backup/intra');
 const client = require('./client');
 
 const INVALID_E_CODE = 400,

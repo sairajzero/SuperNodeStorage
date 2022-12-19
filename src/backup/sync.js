@@ -2,8 +2,8 @@ const Database = require("../database");
 const DB = Database.DB;
 const floGlobals = require("../floGlobals");
 const { H_struct } = require("../data_structure.json");
-const { packet_, _nextNode, _list } = require("./intra");
 const TYPE = require('./message_types.json');
+const { _list, packet_, _nextNode } = require("./values");
 
 const SYNC_WAIT_TIME = 5 * 60 * 1000 //5 mins
 

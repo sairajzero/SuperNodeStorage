@@ -9,7 +9,12 @@ const { SYNC_WAIT_TIME } = require('../_constants')['backup'];
 
 const _ = {
     get block_calc_sql() {
-        return `CEIL(CAST(${H_struct.VECTOR_CLOCK} AS UNSIGNED) / (${floGlobals.sn_config.blockInterval}))`
+        return `CEIL(CAST(${H_struct.VECTOR_CLOCK} AS UNSIGNED) / (${floGlobals.sn_config.blockInterval}))`;
+    },
+    block_range_sql(block_n) {
+        let upper_vc = `${block_n * floGlobals.sn_config.blockInterval + 1}`,
+            lower_vc = `${(block_n - 1) * floGlobals.sn_config.blockInterval + 1}`;
+        return `${H_struct.VECTOR_CLOCK} > '${lower_vc}' AND ${H_struct.VECTOR_CLOCK} < '${upper_vc}'`;
     },
     t_name(node_i) {
         return '_' + node_i;
@@ -23,7 +28,7 @@ const queueSync = {
         if (node_i in this.list)
             return console.debug("Another sync is in process for ", node_i);
         console.info(`START: Data sync for ${node_i}`)
-        this.list[node_i] = { ws, ts: Date.now(), q: [], cur: new Set(), hashes: {} };
+        this.list[node_i] = { ws, ts: Date.now(), q: [], cur: new Set(), ver: new Set(), hashes: {} };
         DB.createTable(node_i)
             .then(result => ws.send(packet_.construct({ type_: TYPE_.REQ_HASH, node_i })))
             .catch(error => console.error(error));
@@ -51,6 +56,7 @@ const queueSync = {
         if (!r.cur.has(block_n))
             return console.warn(`Queue-Sync: Block ${block_n} not currently syncing`);
         r.cur.delete(block_n);
+        r.ver.add(block_n);
         console.debug(`Queue-Sync: Finished block sync for ${node_i}#${block_n}`);
 
         if (!r.cur.size && r.q.length) {
@@ -66,6 +72,7 @@ const queueSync = {
                 this.add_block(node_i, block_n, r.hashes[block_n]);
             else //hash matched
                 delete r.hashes[block_n];
+            r.ver.delete(block_n);
         }).catch(error => console.error(error)), SYNC_WAIT_TIME);
     },
 
@@ -75,7 +82,7 @@ const queueSync = {
         let r = this.list[node_i];
         r.last_block = block_n;
         r.check_interval = setInterval(() => {
-            if (!r.cur.size && !r.q.length) {
+            if (!r.cur.size && !r.q.length && !r.ver.size) {
                 if (Object.keys(r.hashes).length)
                     console.warn(`Queue-Sync: queue list is empty, but hash list is not empty for ${node_i}`);
                 //all blocks synced, remove the sync instance
@@ -149,8 +156,8 @@ function verifyBlockHash(node_i, block_n, hash) {
             Database.query(statement, [block_n]).then(result => {
                 if (!result.length || result[0].hash != hash) { //Hash mismatch
                     //ReSync Block
-                    let clear_statement = `DELETE FROM ${t_name} WHERE ${_.block_calc_sql} = ?`;
-                    Database.query(clear_statement, [block_n])
+                    let clear_statement = `DELETE FROM ${t_name} WHERE ${_.block_range_sql(block_n)}`;
+                    Database.query(clear_statement)
                         .then(_ => resolve(false))
                         .catch(error => reject(error))
                 } else //Hash is verified

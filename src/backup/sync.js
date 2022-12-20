@@ -80,6 +80,7 @@ const queueSync = {
                     console.warn(`Queue-Sync: queue list is empty, but hash list is not empty for ${node_i}`);
                 //all blocks synced, remove the sync instance
                 console.info(`END: Data sync for ${node_i}`);
+                clearInterval(r.check_interval);
                 delete this.list[node_i];
                 //indicate next node for ordering
                 _nextNode.send(packet_.construct({

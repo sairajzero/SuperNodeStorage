@@ -476,12 +476,11 @@ DB.clearAuthorisedAppData = function (snID, app, adminID, subAdmins, timestamp) 
 
 DB.clearUnauthorisedAppData = function (snID, appList, timestamp) {
     return new Promise((resolve, reject) => {
-        let statement = "SELECT * FROM _" + snID +
+        let statement = "DELETE FROM _" + snID +
             " WHERE " + H_struct.TIME + "<?" +
             (appList.length ? " AND " +
                 H_struct.APPLICATION + " NOT IN (" + appList.map(a => "?").join(", ") + ")" :
                 "");
-        console.debug(statement, [timestamp].concat(appList))
         queryResolve(statement, [timestamp].concat(appList))
             .then(result => resolve(result))
             .catch(error => reject(error));

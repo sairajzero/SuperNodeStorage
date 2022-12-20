@@ -1,3 +1,8 @@
+'use strict';
+const keys = require('../keys');
+
+const SUPERNODE_INDICATOR = '$';
+
 //List of node backups stored
 const _list = {};
 Object.defineProperty(_list, 'delete', {
@@ -92,12 +97,8 @@ function NodeContainer() {
 
 //Container for next-node
 const _nextNode = new NodeContainer();
-_nextNode.onmessage = evt => processTaskFromNextNode(evt.data);
-_nextNode.onclose = evt => reconnectNextNode();
 //Container for prev-node
 const _prevNode = new NodeContainer();
-_prevNode.onmessage = evt => processTaskFromPrevNode(evt.data);
-_prevNode.onclose = evt => _prevNode.close();
 
 //Packet processing
 const packet_ = {};
@@ -135,4 +136,5 @@ module.exports = {
     _nextNode,
     _prevNode,
     packet_,
+    SUPERNODE_INDICATOR
 }

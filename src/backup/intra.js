@@ -3,13 +3,9 @@ const WebSocket = require('ws');
 const { DB } = require('../database');
 const keys = require('../keys');
 const TYPE_ = require('./message_types.json');
-const { _list, packet_, _nextNode, _prevNode } = require("./values");
+const { _list, packet_, _nextNode, _prevNode, SUPERNODE_INDICATOR } = require("./values");
 const sync = require('./sync');
-
-//CONSTANTS
-const SUPERNODE_INDICATOR = '$',
-    RETRY_TIMEOUT = 5 * 60 * 1000, //5 mins
-    MIGRATE_WAIT_DELAY = 5 * 60 * 1000; //5 mins
+const { RETRY_TIMEOUT, MIGRATE_WAIT_DELAY } = require('../_constants')['backup'];
 
 var refresher; //container for and refresher
 
@@ -94,6 +90,9 @@ function connectToAllActiveNodes(nodes = null) {
 
 //-----PROCESS TASKS-----
 
+_nextNode.onmessage = evt => processTaskFromNextNode(evt.data);
+_nextNode.onclose = evt => reconnectNextNode();
+
 //Tasks from next-node
 function processTaskFromNextNode(packet) {
     console.debug("_nextNode: ", packet);
@@ -126,6 +125,9 @@ function processTaskFromNextNode(packet) {
         });
     };
 };
+
+_prevNode.onmessage = evt => processTaskFromPrevNode(evt.data);
+_prevNode.onclose = evt => _prevNode.close();
 
 //Tasks from prev-node
 function processTaskFromPrevNode(packet) {

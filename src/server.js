@@ -3,9 +3,7 @@ const WebSocket = require('ws');
 const url = require('url');
 const intra = require('./backup/intra');
 const client = require('./client');
-
-const INVALID_E_CODE = 400,
-    INTERNAL_E_CODE = 500;
+const { INVALID, INVALID_E_CODE, INTERNAL_E_CODE } = require('./_constants');
 
 module.exports = function Server(port) {
 

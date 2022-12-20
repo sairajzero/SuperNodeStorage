@@ -1,11 +1,6 @@
 const { DB } = require("./database");
 const { _list } = require("./backup/values");
-
-global.INVALID = function (message) {
-    if (!(this instanceof INVALID))
-        return new INVALID(message);
-    this.message = message;
-}
+const { INVALID } = require("./_constants");
 
 function processIncomingData(data) {
     return new Promise((resolve, reject) => {
@@ -37,7 +32,7 @@ function processIncomingData(data) {
             else
                 return reject(INVALID("Invalid Data-format"));
             process.then(result => {
-                console.debug(result);
+                //console.debug(result);
                 resolve(result);
             }).catch(error => {
                 (error instanceof INVALID ? console.debug : console.error)(error);

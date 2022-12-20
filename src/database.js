@@ -45,15 +45,15 @@ function queryResolve(sql, values) {
     })
 }
 
-function queryStream(sql, value, callback) {
+function queryStream(sql, values, callback) {
     return new Promise((resolve, reject) => {
         getConnection().then(conn => {
-            if (!callback && value instanceof Function) {
-                callback = value;
-                value = undefined;
+            if (!callback && values instanceof Function) {
+                callback = values;
+                values = undefined;
             }
             var err_flag, row_count = 0;
-            (value ? conn.query(sql, values) : conn.query(sql))
+            (values ? conn.query(sql, values) : conn.query(sql))
                 .on('error', err => err_flag = err)
                 .on('result', row => {
                     row_count++;
@@ -476,11 +476,12 @@ DB.clearAuthorisedAppData = function (snID, app, adminID, subAdmins, timestamp) 
 
 DB.clearUnauthorisedAppData = function (snID, appList, timestamp) {
     return new Promise((resolve, reject) => {
-        let statement = "DELETE FROM _" + snID +
+        let statement = "SELECT * FROM _" + snID +
             " WHERE " + H_struct.TIME + "<?" +
             (appList.length ? " AND " +
                 H_struct.APPLICATION + " NOT IN (" + appList.map(a => "?").join(", ") + ")" :
                 "");
+        console.debug(statement, [timestamp].concat(appList))
         queryResolve(statement, [timestamp].concat(appList))
             .then(result => resolve(result))
             .catch(error => reject(error));

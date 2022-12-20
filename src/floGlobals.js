@@ -16,6 +16,7 @@ const floGlobals = {
     deleteDelay     - (Interger) Maximum duration (milliseconds) an unauthorised data is stored
     errorFeedback   - (Boolean) Send error (if any) feedback to the requestor
     delayDelta      - (Interger) Maximum allowed delay from the data-time
+    blockInterval   - (Interger) Duration (milliseconds) of a single block (for backup sync)
     */
 };
 

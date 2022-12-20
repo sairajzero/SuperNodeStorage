@@ -8,9 +8,9 @@ const Database = require("./database");
 const intra = require('./backup/intra');
 const Server = require('./server');
 const keys = require("./keys");
+const { INTERVAL_REFRESH_TIME } = require("./_constants");
 
 const DB = Database.DB;
-const INTERVAL_REFRESH_TIME = 1 * 60 * 60 * 1000; //1 hr
 
 function startNode() {
 

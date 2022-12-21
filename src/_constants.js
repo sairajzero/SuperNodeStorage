@@ -14,6 +14,6 @@ module.exports = {
     backup: {
         RETRY_TIMEOUT: 5 * 60 * 1000, //5 mins
         MIGRATE_WAIT_DELAY: 5 * 60 * 1000, //5 mins
-        SYNC_WAIT_TIME: 10*1000//5 * 60 * 1000 //5 mins
+        SYNC_WAIT_TIME: 5 * 60 * 1000 //5 mins
     }
 }

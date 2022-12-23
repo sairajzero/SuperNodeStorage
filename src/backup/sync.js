@@ -2,12 +2,14 @@
 const Database = require("../database");
 const DB = Database.DB;
 const floGlobals = require("../floGlobals");
-const { H_struct } = require("../data_structure.json");
+const { H_struct, L_struct } = require("../data_structure.json");
 const TYPE_ = require('./message_types.json');
 const { _list, packet_, _nextNode } = require("./values");
 const { SYNC_WAIT_TIME } = require('../_constants')['backup'];
 
-const _ = {
+const SESSION_GROUP_CONCAT_MAX_LENGTH = 100000 //MySQL default max value is 1024, which is too low for block grouping
+
+const _x = {
     get block_calc_sql() {
         return `CEIL(CAST(${H_struct.VECTOR_CLOCK} AS UNSIGNED) / (${floGlobals.sn_config.blockInterval}))`;
     },
@@ -15,6 +17,9 @@ const _ = {
         let upper_vc = `${block_n * floGlobals.sn_config.blockInterval + 1}`,
             lower_vc = `${(block_n - 1) * floGlobals.sn_config.blockInterval + 1}`;
         return `${H_struct.VECTOR_CLOCK} > '${lower_vc}' AND ${H_struct.VECTOR_CLOCK} < '${upper_vc}'`;
+    },
+    get hash_algo_sql() {
+        return `MD5(GROUP_CONCAT(${[H_struct.VECTOR_CLOCK, L_struct.LOG_TIME].join()}))`;
     },
     t_name(node_i) {
         return '_' + node_i;
@@ -99,10 +104,10 @@ const queueSync = {
     }
 };
 
-function getColumns(t_name) {
+function setSessionVar() {
     return new Promise((resolve, reject) => {
-        Database.query("SHOW COLUMNS FROM " + t_name)
-            .then(result => resolve(result.map(r => r["Field"]).sort()))
+        Database.query(`SET SESSION group_concat_max_len = ${SESSION_GROUP_CONCAT_MAX_LENGTH}`)
+            .then(result => resolve(result))
             .catch(error => reject(error))
     })
 }
@@ -114,10 +119,9 @@ function requestDataSync(node_i, ws) {
 
 //S: send hashes for node_i
 function sendBlockHashes(node_i, ws) {
-    let t_name = _.t_name(node_i);
-    getColumns(t_name).then(columns => {
-        let statement = `SELECT ${_.block_calc_sql} AS block_n,`
-            + ` MD5(GROUP_CONCAT(${columns.map(c => `IFNULL(${c}, "NULL")`).join()})) as hash`
+    let t_name = _x.t_name(node_i);
+    setSessionVar().then(_ => {
+        let statement = `SELECT ${_x.block_calc_sql} AS block_n, ${_x.hash_algo_sql} as hash`
             + ` FROM ${t_name} GROUP BY block_n ORDER BY block_n`;
         let last_block;
         Database.query_stream(statement, r => {
@@ -149,14 +153,14 @@ function checkBlockHash(node_i, block_n, hash) {
 
 function verifyBlockHash(node_i, block_n, hash) {
     return new Promise((resolve, reject) => {
-        let t_name = _.t_name(node_i);
-        getColumns(t_name).then(columns => {
-            let statement = `SELECT MD5(GROUP_CONCAT(${columns.map(c => `IFNULL(${c}, "NULL")`).join()})) as hash`
-                + ` FROM ${t_name} WHERE ${_.block_calc_sql}  = ?`;
+        let t_name = _x.t_name(node_i);
+        setSessionVar().then(_ => {
+            let statement = `SELECT ${_x.hash_algo_sql} as hash`
+                + ` FROM ${t_name} WHERE ${_x.block_calc_sql}  = ?`;
             Database.query(statement, [block_n]).then(result => {
                 if (!result.length || result[0].hash != hash) { //Hash mismatch
                     //ReSync Block
-                    let clear_statement = `DELETE FROM ${t_name} WHERE ${_.block_range_sql(block_n)}`;
+                    let clear_statement = `DELETE FROM ${t_name} WHERE ${_x.block_range_sql(block_n)}`;
                     Database.query(clear_statement)
                         .then(_ => resolve(false))
                         .catch(error => reject(error))
@@ -174,14 +178,14 @@ function setLastBlock(node_i, block_n) {
 
 //S: send data for block
 function sendBlockData(node_i, block_n, ws) {
-    let t_name = _.t_name(node_i);
+    let t_name = _x.t_name(node_i);
     ws.send(packet_.construct({
         type_: TYPE_.INDICATE_BLK,
         node_i, block_n,
         status: true
     }))
     console.debug(`START: Sync-send ${node_i}#${block_n} to ${ws.id}`);
-    let statement = `SELECT * FROM ${t_name} WHERE ${_.block_calc_sql} = ?`;
+    let statement = `SELECT * FROM ${t_name} WHERE ${_x.block_calc_sql} = ?`;
     Database.query_stream(statement, [block_n], d => ws.send(packet_.construct({
         type_: TYPE_.STORE_BACKUP_DATA,
         data: d

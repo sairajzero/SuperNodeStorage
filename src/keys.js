@@ -4,7 +4,7 @@ const PRIV_EKEY_MIN = 32,
     PRIV_EKEY_MAX = 48;
 
 var node_priv, e_key, node_id, node_pub; //containers for node-key wrapper
-const _ = {
+const _x = {
     get node_priv() {
         if (!node_priv || !e_key)
             throw Error("keys not set");
@@ -23,10 +23,10 @@ const _ = {
 
 module.exports = {
     set node_priv(key) {
-        _.node_priv = key;
+        _x.node_priv = key;
     },
     get node_priv() {
-        return _.node_priv;
+        return _x.node_priv;
     },
     get node_id() {
         return node_id;

@@ -1,4 +1,4 @@
-(function(EXPORTS) { //floBlockchainAPI v2.3.3a
+(function (EXPORTS) { //floBlockchainAPI v2.3.3e
     /* FLO Blockchain Operator to send/receive data from blockchain using API calls*/
     'use strict';
     const floBlockchainAPI = EXPORTS;
@@ -6,11 +6,12 @@
     const DEFAULT = {
         blockchain: floGlobals.blockchain,
         apiURL: {
-            FLO: ['https://livenet.flocha.in/', 'https://flosight.duckdns.org/'],
+            FLO: ['https://flosight.duckdns.org/', 'https://flosight.ranchimall.net/'],
             FLO_TEST: ['https://testnet-flosight.duckdns.org', 'https://testnet.flocha.in/']
         },
         sendAmt: 0.001,
         fee: 0.0005,
+        minChangeAmt: 0.0005,
         receiverID: floGlobals.adminID
     };
 
@@ -49,7 +50,7 @@
     const allServerList = new Set(floGlobals.apiURL && floGlobals.apiURL[DEFAULT.blockchain] ? floGlobals.apiURL[DEFAULT.blockchain] : DEFAULT.apiURL[DEFAULT.blockchain]);
 
     var serverList = Array.from(allServerList);
-    var curPos = floCrypto.randInt(0, serverList - 1);
+    var curPos = floCrypto.randInt(0, serverList.length - 1);
 
     function fetch_retry(apicall, rm_flosight) {
         return new Promise((resolve, reject) => {
@@ -102,7 +103,7 @@
     });
 
     //Promised function to get data from API
-    const promisedAPI = floBlockchainAPI.promisedAPI = floBlockchainAPI.fetch = function(apicall) {
+    const promisedAPI = floBlockchainAPI.promisedAPI = floBlockchainAPI.fetch = function (apicall) {
         return new Promise((resolve, reject) => {
             //console.log(apicall);
             fetch_api(apicall)
@@ -112,7 +113,7 @@
     }
 
     //Get balance for the given Address
-    const getBalance = floBlockchainAPI.getBalance = function(addr) {
+    const getBalance = floBlockchainAPI.getBalance = function (addr) {
         return new Promise((resolve, reject) => {
             promisedAPI(`api/addr/${addr}/balance`)
                 .then(balance => resolve(parseFloat(balance)))
@@ -121,7 +122,7 @@
     }
 
     //Send Tx to blockchain 
-    const sendTx = floBlockchainAPI.sendTx = function(senderAddr, receiverAddr, sendAmt, privKey, floData = '', strict_utxo = true) {
+    const sendTx = floBlockchainAPI.sendTx = function (senderAddr, receiverAddr, sendAmt, privKey, floData = '', strict_utxo = true) {
         return new Promise((resolve, reject) => {
             if (!floCrypto.validateASCII(floData))
                 return reject("Invalid FLO_Data: only printable ASCII characters are allowed");
@@ -171,7 +172,7 @@
                             else {
                                 trx.addoutput(receiverAddr, sendAmt);
                                 var change = utxoAmt - sendAmt - fee;
-                                if (change > 0)
+                                if (change > DEFAULT.minChangeAmt)
                                     trx.addoutput(senderAddr, change);
                                 trx.addflodata(floData.replace(/\n/g, ' '));
                                 var signedTxHash = trx.sign(privKey, 1);
@@ -187,7 +188,7 @@
     }
 
     //Write Data into blockchain
-    floBlockchainAPI.writeData = function(senderAddr, data, privKey, receiverAddr = DEFAULT.receiverID, options = {}) {
+    floBlockchainAPI.writeData = function (senderAddr, data, privKey, receiverAddr = DEFAULT.receiverID, options = {}) {
         let strict_utxo = options.strict_utxo === false ? false : true,
             sendAmt = isNaN(options.sendAmt) ? DEFAULT.sendAmt : options.sendAmt;
         return new Promise((resolve, reject) => {
@@ -200,7 +201,7 @@
     }
 
     //merge all UTXOs of a given floID into a single UTXO
-    floBlockchainAPI.mergeUTXOs = function(floID, privKey, floData = '') {
+    floBlockchainAPI.mergeUTXOs = function (floID, privKey, floData = '') {
         return new Promise((resolve, reject) => {
             if (!floCrypto.validateFloID(floID))
                 return reject(`Invalid floID`);
@@ -234,7 +235,7 @@
      * @param  {boolean} preserveRatio (optional) preserve ratio or equal contribution
      * @return {Promise}
      */
-    floBlockchainAPI.writeDataMultiple = function(senderPrivKeys, data, receivers = [DEFAULT.receiverID], preserveRatio = true) {
+    floBlockchainAPI.writeDataMultiple = function (senderPrivKeys, data, receivers = [DEFAULT.receiverID], preserveRatio = true) {
         return new Promise((resolve, reject) => {
             if (!Array.isArray(senderPrivKeys))
                 return reject("Invalid senderPrivKeys: SenderPrivKeys must be Array");
@@ -266,7 +267,7 @@
      * @param  {string} floData FLO data of the txn
      * @return {Promise}
      */
-    const sendTxMultiple = floBlockchainAPI.sendTxMultiple = function(senderPrivKeys, receivers, floData = '') {
+    const sendTxMultiple = floBlockchainAPI.sendTxMultiple = function (senderPrivKeys, receivers, floData = '') {
         return new Promise((resolve, reject) => {
             if (!floCrypto.validateASCII(floData))
                 return reject("Invalid FLO_Data: only printable ASCII characters are allowed");
@@ -371,18 +372,18 @@
                     })
                 //Calculate totalSentAmount and check if totalBalance is sufficient
                 let totalSendAmt = totalFee;
-                for (floID in receivers)
+                for (let floID in receivers)
                     totalSendAmt += receivers[floID];
                 if (totalBalance < totalSendAmt)
                     return reject("Insufficient total Balance");
                 //Get the UTXOs of the senders
                 let promises = [];
-                for (floID in senders)
+                for (let floID in senders)
                     promises.push(promisedAPI(`api/addr/${floID}/utxo`));
                 Promise.all(promises).then(results => {
                     let wifSeq = [];
                     var trx = bitjs.transaction();
-                    for (floID in senders) {
+                    for (let floID in senders) {
                         let utxos = results.shift();
                         let sendAmt;
                         if (preserveRatio) {
@@ -406,7 +407,7 @@
                         if (change > 0)
                             trx.addoutput(floID, change);
                     }
-                    for (floID in receivers)
+                    for (let floID in receivers)
                         trx.addoutput(floID, receivers[floID]);
                     trx.addflodata(floData.replace(/\n/g, ' '));
                     for (let i = 0; i < wifSeq.length; i++)
@@ -421,7 +422,7 @@
     }
 
     //Broadcast signed Tx in blockchain using API
-    const broadcastTx = floBlockchainAPI.broadcastTx = function(signedTxHash) {
+    const broadcastTx = floBlockchainAPI.broadcastTx = function (signedTxHash) {
         return new Promise((resolve, reject) => {
             if (signedTxHash.length < 1)
                 return reject("Empty Signature");
@@ -441,7 +442,7 @@
         })
     }
 
-    floBlockchainAPI.getTx = function(txid) {
+    floBlockchainAPI.getTx = function (txid) {
         return new Promise((resolve, reject) => {
             promisedAPI(`api/tx/${txid}`)
                 .then(response => resolve(response))
@@ -450,7 +451,7 @@
     }
 
     //Read Txs of Address between from and to
-    const readTxs = floBlockchainAPI.readTxs = function(addr, from, to) {
+    const readTxs = floBlockchainAPI.readTxs = function (addr, from, to) {
         return new Promise((resolve, reject) => {
             promisedAPI(`api/addrs/${addr}/txs?from=${from}&to=${to}`)
                 .then(response => resolve(response))
@@ -459,7 +460,7 @@
     }
 
     //Read All Txs of Address (newest first)
-    floBlockchainAPI.readAllTxs = function(addr) {
+    floBlockchainAPI.readAllTxs = function (addr) {
         return new Promise((resolve, reject) => {
             promisedAPI(`api/addrs/${addr}/txs?from=0&to=1`).then(response => {
                 promisedAPI(`api/addrs/${addr}/txs?from=0&to=${response.totalItems}0`)
@@ -481,15 +482,15 @@
     sender      : flo-id(s) of sender
     receiver    : flo-id(s) of receiver
     */
-    floBlockchainAPI.readData = function(addr, options = {}) {
+    floBlockchainAPI.readData = function (addr, options = {}) {
         options.limit = options.limit || 0;
         options.ignoreOld = options.ignoreOld || 0;
-        if (typeof options.sender === "string") options.sender = [options.sender];
-        if (typeof options.receiver === "string") options.receiver = [options.receiver];
+        if (typeof options.senders === "string") options.senders = [options.senders];
+        if (typeof options.receivers === "string") options.receivers = [options.receivers];
         return new Promise((resolve, reject) => {
             promisedAPI(`api/addrs/${addr}/txs?from=0&to=1`).then(response => {
                 var newItems = response.totalItems - options.ignoreOld;
-                promisedAPI(`api/addrs/${addr}/txs?from=0&to=${newItems*2}`).then(response => {
+                promisedAPI(`api/addrs/${addr}/txs?from=0&to=${newItems * 2}`).then(response => {
                     if (options.limit <= 0)
                         options.limit = response.items.length;
                     var filteredData = [];
@@ -520,10 +521,10 @@
                                 }
                             if (!flag) continue;
                         }
-                        if (Array.isArray(options.sender)) {
+                        if (Array.isArray(options.senders)) {
                             let flag = false;
                             for (let vin of response.items[i].vin)
-                                if (options.sender.includes(vin.addr)) {
+                                if (options.senders.includes(vin.addr)) {
                                     flag = true;
                                     break;
                                 }
@@ -538,10 +539,10 @@
                                 }
                             if (!flag) continue;
                         }
-                        if (Array.isArray(options.receiver)) {
+                        if (Array.isArray(options.receivers)) {
                             let flag = false;
                             for (let vout of response.items[i].vout)
-                                if (options.receiver.includes(vout.scriptPubKey.addresses[0])) {
+                                if (options.receivers.includes(vout.scriptPubKey.addresses[0])) {
                                     flag = true;
                                     break;
                                 }
@@ -555,6 +556,8 @@
                             d.txid = response.items[i].txid;
                             d.time = response.items[i].time;
                             d.blockheight = response.items[i].blockheight;
+                            d.senders = new Set(response.items[i].vin.map(v => v.addr));
+                            d.receivers = new Set(response.items[i].vout.map(v => v.scriptPubKey.addresses[0]));
                             d.data = response.items[i].floData;
                             filteredData.push(d);
                         } else

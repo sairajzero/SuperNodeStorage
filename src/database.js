@@ -408,7 +408,8 @@ DB.storeData = function (snID, data, updateLogTime = false) {
             data[L_struct.LOG_TIME] = Date.now();
         let u_attr = Object.keys(B_struct).map(a => B_struct[a])
             .concat(Object.keys(L_struct).map(a => L_struct[a]))
-            .concat(Object.keys(T_struct).map(a => T_struct[a]));
+            .concat(Object.keys(T_struct).map(a => T_struct[a]))
+            .concat(Object.keys(F_struct).map(a => F_struct[a]));
         let attr = Object.keys(H_struct).map(a => H_struct[a]).concat(u_attr);
         let values = attr.map(a => data[a]);
         let u_values = u_attr.map(a => data[a]);

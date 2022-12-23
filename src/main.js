@@ -92,7 +92,11 @@ const refreshData = {
                 console.error(error);
                 reject(false);
             }).finally(_ => {
-                self.refresh_instance = setInterval(() => refreshBlockchainData(self.base, true), INTERVAL_REFRESH_TIME)
+                self.refresh_instance = setInterval(() => {
+                    refreshBlockchainData(self.base, true)
+                        .then(result => console.log(result))
+                        .catch(error => console.error(error))
+                }, INTERVAL_REFRESH_TIME)
             });
         });
     },

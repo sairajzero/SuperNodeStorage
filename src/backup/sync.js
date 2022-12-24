@@ -15,7 +15,6 @@ const col_aggregate = (function () {
     for (let s in ds)
         for (let c in ds[s])
             cols.push(ds[s][c]);
-    cols.sort();
     return cols.map(c => `IFNULL(CRC32(${c}), 0)`).join('+');
 })();
 
@@ -129,6 +128,8 @@ function requestDataSync(node_i, ws) {
 
 //S: send hashes for node_i
 function sendBlockHashes(node_i, ws) {
+    if (!_list.stored.includes(node_i))
+        return console.debug(`Block hash is requested for ${node_i}, but its not in stored list`);
     let t_name = _x.t_name(node_i);
     setSessionVar().then(_ => {
         let statement = `SELECT ${_x.block_calc_sql} AS block_n, ${_x.hash_algo_sql} as hash`
@@ -188,6 +189,8 @@ function setLastBlock(node_i, block_n) {
 
 //S: send data for block
 function sendBlockData(node_i, block_n, ws) {
+    if (!_list.stored.includes(node_i))
+        return console.debug(`Block hash is requested for ${node_i}, but its not in stored list`);
     let t_name = _x.t_name(node_i);
     ws.send(packet_.construct({
         type_: TYPE_.INDICATE_BLK,

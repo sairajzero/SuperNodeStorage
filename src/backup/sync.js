@@ -2,12 +2,22 @@
 const Database = require("../database");
 const DB = Database.DB;
 const floGlobals = require("../floGlobals");
-const { H_struct, L_struct } = require("../data_structure.json");
+const { H_struct } = require("../data_structure.json");
 const TYPE_ = require('./message_types.json');
 const { _list, packet_, _nextNode } = require("./values");
 const { SYNC_WAIT_TIME } = require('../_constants')['backup'];
 
 const SESSION_GROUP_CONCAT_MAX_LENGTH = 100000 //MySQL default max value is 1024, which is too low for block grouping
+
+const col_aggregate = (function () {
+    let ds = require("../data_structure.json");
+    let cols = [];
+    for (let s in ds)
+        for (let c in ds[s])
+            cols.push(ds[s][c]);
+    cols.sort();
+    return cols.map(c => `IFNULL(CRC32(${c}), 0)`).join('+');
+})();
 
 const _x = {
     get block_calc_sql() {
@@ -19,7 +29,7 @@ const _x = {
         return `${H_struct.VECTOR_CLOCK} > '${lower_vc}' AND ${H_struct.VECTOR_CLOCK} < '${upper_vc}'`;
     },
     get hash_algo_sql() {
-        return `MD5(GROUP_CONCAT(${[H_struct.VECTOR_CLOCK, L_struct.LOG_TIME].join()}))`;
+        return `MD5(GROUP_CONCAT(${col_aggregate}))`;
     },
     t_name(node_i) {
         return '_' + node_i;

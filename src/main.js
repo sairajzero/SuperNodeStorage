@@ -256,7 +256,7 @@ function diskCleanUp(base) {
             promises.push(DB.clearUnauthorisedAppData(sn, Object.keys(base.appList), time));
             //for each authorised app: delete unofficial data (untaged, unknown sender/receiver)
             for (let app in base.appList)
-                promises.push(DB.clearAuthorisedAppData(sn, app, base.appList[app], base.subAdmins[app], time));
+                promises.push(DB.clearAuthorisedAppData(sn, app, base.appList[app], base.appSubAdmins[app], time));
         });
 
         Promise.allSettled(promises).then(results => {

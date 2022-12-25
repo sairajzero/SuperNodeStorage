@@ -43,13 +43,13 @@ function configureSQL() {
         flaggedYesOrNo('Do you want to re-configure mySQL connection').then(value => {
             if (value) {
                 console.log('Enter mySQL connection values: ')
-                getInput.Text('Host', config['sql_host']).then(host => {
+                getInput.Text('MySQL host', config['sql_host']).then(host => {
                     config['sql_host'] = host;
                     getInput.Text('Database name', config['sql_db']).then(dbname => {
                         config['sql_db'] = dbname;
                         getInput.Text('MySQL username', config['sql_user']).then(sql_user => {
                             config['sql_user'] = sql_user;
-                            getInput.Text('Mysql password', config['sql_pwd']).then(sql_pwd => {
+                            getInput.Text('MySQL password', config['sql_pwd']).then(sql_pwd => {
                                 config['sql_pwd'] = sql_pwd;
                                 resolve(true);
                             })

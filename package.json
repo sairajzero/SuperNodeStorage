@@ -1,0 +1,37 @@
+{
+    "name": "supernodestorage",
+    "version": "1.0.0",
+    "description": "Supernode Storage is a Cloud Storage program for FLO Dapps",
+    "main": "src/main.js",
+    "dependencies": {
+        "mysql": "^2.18.1",
+        "node-fetch": "^2.6.1",
+        "ws": "^7.5.0"
+    },
+    "devDependencies": {},
+    "scripts": {
+        "postinstall": "node setup/post-install.js",
+        "help": "node setup/help.js",
+        "setup": "node setup/post-install.js",
+        "configure": "node setup/configure-settings.js",
+        "reset-password": "node setup/reset-password.js",
+        "checksum-db": "node debug/checksum-db.js",
+        "start": "node start.js"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/ranchimall/SuperNodeStorage.git"
+    },
+    "keywords": [
+        "FLO",
+        "supernode",
+        "cloud",
+        "storage"
+    ],
+    "author": "Sai Raj (https://github.com/sairajzero)",
+    "license": "MIT",
+    "bugs": {
+        "url": "https://github.com/ranchimall/SuperNodeStorage/issues"
+    },
+    "homepage": "https://github.com/ranchimall/SuperNodeStorage#readme"
+}

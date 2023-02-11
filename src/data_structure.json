@@ -1,0 +1,33 @@
+{
+    "H_struct": {
+        "VECTOR_CLOCK": "vectorClock",
+        "SENDER_ID": "senderID",
+        "RECEIVER_ID": "receiverID",
+        "TYPE": "type",
+        "APPLICATION": "application",
+        "TIME": "time",
+        "PUB_KEY": "pubKey"
+    },
+    "B_struct": {
+        "MESSAGE": "message",
+        "SIGNATURE": "sign",
+        "COMMENT": "comment"
+    },
+    "L_struct": {
+        "PROXY_ID": "proxyID",
+        "STATUS": "status_n",
+        "LOG_TIME": "log_time"
+    },
+    "T_struct": {
+        "TAG": "tag",
+        "TAG_TIME": "tag_time",
+        "TAG_KEY": "tag_key",
+        "TAG_SIGN": "tag_sign"
+    },
+    "F_struct": {
+        "NOTE": "note",
+        "NOTE_TIME": "note_time",
+        "NOTE_KEY": "note_key",
+        "NOTE_SIGN": "note_sign"
+    }
+}

@@ -1,0 +1,25 @@
+{
+    "LastTxs": {
+        "ID": "CHAR(34) NOT NULL",
+        "N": "INT NOT NULL",
+        "PRIMARY": "KEY (ID)"
+    },
+    "Configs": {
+        "NAME": "VARCHAR(64) NOT NULL",
+        "VAL": "VARCHAR(512) NOT NULL",
+        "PRIMARY": "KEY (NAME)"
+    },
+    "SuperNodes": {
+        "FLO_ID": "CHAR(34) NOT NULL",
+        "PUB_KEY": "CHAR(66) NOT NULL",
+        "URI": "VARCHAR(256) NOT NULL",
+        "PRIMARY": "KEY (FLO_ID)"
+    },
+    "Applications": {
+        "APP_NAME": "VARCHAR(64) NOT NULL",
+        "ADMIN_ID": "CHAR(34) NOT NULL",
+        "SUB_ADMINS": "TEXT",
+        "TRUSTED_IDS": "TEXT",
+        "PRIMARY": "KEY (APP_NAME)"
+    }
+}

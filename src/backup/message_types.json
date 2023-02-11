@@ -1,0 +1,27 @@
+{
+    "REQ_HASH": "req_hash",
+    "RES_HASH": "block_hash",
+    "REQ_BLOCK": "req_block",
+    "VAL_LAST_BLK": "set_last_block",
+    "INDICATE_BLK": "indicate_block",
+    "STORE_BACKUP_DATA": "store_data",
+
+    "ORDER_BACKUP": "orderBackup",
+
+    "STORE_MIGRATED_DATA": "migratedData",
+    "DELETE_MIGRATED_DATA": "migratedDelete",
+
+    "DELETE_BACKUP_DATA": "backupDelete___NOT_USED",
+    "TAG_BACKUP_DATA": "backupTag",
+    "NOTE_BACKUP_DATA": "backupNote",
+    "EDIT_BACKUP_DATA": "backupEdit___NOT_USED",
+
+    "INITIATE_REFRESH": "initiateRefresh",
+
+    "DATA_REQUEST": "dataRequest",
+    "DATA_SYNC": "dataSync",
+
+    "BACKUP_HANDSHAKE_INIT": "handshakeInitate",
+    "BACKUP_HANDSHAKE_END": "handshakeEnd",
+    "RECONNECT_NEXT_NODE": "reconnectNextNode"
+}

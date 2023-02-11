@@ -1,23 +1,62 @@
 
-# SuperNodeStorage
-FLO Supernode Storage is a Cloud Storage progam for FLO Dapps
+# SuperNode Storage
 
 ## Installation
-1. Download or clone the [repo](https://github.com/ranchimall/SuperNodeStorage):
 
-		git clone https://github.com/ranchimall/SuperNodeStorage
-2. Add a strong <server_password>  in `.config` file
-3. Change other configurations (if needed)
-4. Host and publish the domain name or IP with port
+### Pre-requisite
+- [X] Nodejs `version >= 12.9` (`--lts` recommended)
+- [X] MySQL Server `version > 8.0`
 
-## Usage
-1. Start the app using the following command in terminal. The server WSS will be started and the supernode html-js will be opened in the browser.
+### Download
+Download the repository using git:
+```
+git clone https://github.com/ranchimall/SuperNodeStorage.git
+```
 
-		./start_supernode.sh
-2.  (Only for first time login) Enter the <server_password> and <private_key> when prompted
+### Install
+Install using npm:
+```
+cd SuperNodeStorage
+npm install
+```
+Finish the configuration when prompted
 
-The Supernode storage will automatically start
+### Configuration
 
-NOTE: The <server_password> and <private_key> will be stored securedly in IndexedDB of the browser
+#### General Configuration
+If not finished during installation, or to re-configure use:
+```
+npm run configure
+```
+- **port**: Port of the server to run on
+- **MySQL host**: Host of the MySQL server (default: ***localhost***)
+- **Database name**: Database in which the data should be stored (`<database-name>`) (default: ***supernode***)
+- **MySQL username**: Username for MySQL (`<sql-username>`)
+- **MySQL password**: Password for MySQL (`<sql-password>`)
 
-NOTE: Users may add `start_supernode` to bootup process to automatically start the supernode during boot up
+***Recommended*** *(optional)* Create and use a MySQL user instead of root. Remember to give access to the database to the user.
+
+#### Set/Reset Node key password
+If not set during installation, or to reset password, use:
+```
+npm run reset-password
+```
+- **private key**: Private key of the node
+- **password**: Password to set for the node (`<password>`)
+
+**Note**: Private key of the node is encrypted using the `<password>`. Thus use a ***strong*** password.
+
+### More
+For help or list of all commands, use
+```
+npm run help
+```
+
+## Starting the Server
+After successful installation and configuration using the above steps, SuperNodeStorage can be started using:
+```
+npm start -- -PASSWORD=<password>
+```
+
+##
+For more information and detailed installation, check the wiki [here](https://github.com/ranchimall/SuperNodeStorage/wiki).

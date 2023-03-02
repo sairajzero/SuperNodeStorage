@@ -154,7 +154,7 @@ function processNoteFromUser(data) {
 }
 
 function checkIfRequestSatisfy(request, data) {
-    if (!request || request.mostRecent || request.receiverID !== (data.proxyID || data.receiverID))
+    if (!request || request.mostRecent || cloud.proxyID(request.receiverID) !== (data.proxyID || data.receiverID))
         return false;
     if (request.atVectorClock && request.atVectorClock !== data.vectorClock)
         return false;

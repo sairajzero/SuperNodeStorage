@@ -329,32 +329,49 @@ DB.noteData = function (snID, vectorClock, note, noteTime, noteKey, noteSign) {
 
 DB.searchData = function (snID, request) {
     return new Promise((resolve, reject) => {
-        let conditionArr = [];
+        let conditionArr = [], conditionValues = [];
         if (request.lowerVectorClock || request.upperVectorClock || request.atVectorClock) {
-            if (request.atVectorClock)
-                conditionArr.push(`${H_struct.VECTOR_CLOCK} = '${request.atVectorClock}'`);
-            else if (request.lowerVectorClock && request.upperVectorClock)
-                conditionArr.push(`${H_struct.VECTOR_CLOCK} BETWEEN '${request.lowerVectorClock}' AND '${request.upperVectorClock}'`);
-            else if (request.lowerVectorClock)
-                conditionArr.push(`${H_struct.VECTOR_CLOCK} >= '${request.lowerVectorClock}'`);
-            else if (request.upperVectorClock)
-                conditionArr.push(`${H_struct.VECTOR_CLOCK} <= '${request.upperVectorClock}'`);
+            if (request.atVectorClock) {
+                conditionArr.push(`${H_struct.VECTOR_CLOCK} = ?`);
+                conditionValues.push(request.atVectorClock);
+            } else if (request.lowerVectorClock && request.upperVectorClock) {
+                conditionArr.push(`(${H_struct.VECTOR_CLOCK} BETWEEN ? AND ?)`);
+                conditionValues.push(request.lowerVectorClock);
+                conditionValues.push(request.upperVectorClock);
+            } else if (request.lowerVectorClock) {
+                conditionArr.push(`${H_struct.VECTOR_CLOCK} >= ?`);
+                conditionValues.push(request.lowerVectorClock);
+            } else if (request.upperVectorClock) {
+                conditionArr.push(`${H_struct.VECTOR_CLOCK} <= ?`);
+                conditionValues.push(request.upperVectorClock);
+            }
         }
-        if (request.afterTime)
-            conditionArr.push(`${L_struct.LOG_TIME} > ${request.afterTime}`);
-        conditionArr.push(`${H_struct.APPLICATION} = '${request.application}'`);
-        conditionArr.push(`IFNULL(${L_struct.PROXY_ID}, ${H_struct.RECEIVER_ID}) = '${cloud.proxyID(request.receiverID)}'`);
-        if (request.comment)
-            conditionArr.push(`${B_struct.COMMENT} = '${request.comment}'`);
-        if (request.type)
-            conditionArr.push(`${H_struct.TYPE} = '${request.type}'`);
+        if (request.afterTime) {
+            conditionArr.push(`${L_struct.LOG_TIME} > ?`);
+            conditionValues.push(request.afterTime);
+        }
+        conditionArr.push(`${H_struct.APPLICATION} = ?`);
+        conditionValues.push(request.application);
+        conditionArr.push(`IFNULL(${L_struct.PROXY_ID}, ${H_struct.RECEIVER_ID}) = ?`);
+        conditionValues.push(cloud.proxyID(request.receiverID));
+        if (request.comment) {
+            conditionArr.push(`${B_struct.COMMENT} = ?`);
+            conditionValues.push(request.comment);
+        }
+        if (request.type) {
+            conditionArr.push(`${H_struct.TYPE} = ?`);
+            conditionValues.push(request.type);
+        }
         if (request.senderID) {
             if (typeof request.senderID === "string" && request.senderID.includes(','))
                 request.senderID = request.senderID.split(',');
-            if (Array.isArray(request.senderID))
-                conditionArr.push(`${H_struct.SENDER_ID} IN ('${request.senderID.join("', '")}')`);
-            else
-                conditionArr.push(`${H_struct.SENDER_ID} = '${request.senderID}'`);
+            if (Array.isArray(request.senderID)) {
+                conditionArr.push(`${H_struct.SENDER_ID} IN (?)`);
+                conditionValues.push(request.senderID);
+            } else {
+                conditionArr.push(`${H_struct.SENDER_ID} = ?`);
+                conditionValues.push(request.senderID);
+            }
         };
         //console.log(conditionArr);
         //let attr = Object.keys(H_struct).map(a => H_struct[a]).concat(Object.keys(B_struct).map(a => B_struct[a]));
@@ -363,7 +380,7 @@ DB.searchData = function (snID, request) {
             " WHERE " + conditionArr.join(" AND ") +
             " ORDER BY " + (request.afterTime ? L_struct.LOG_TIME : H_struct.VECTOR_CLOCK) +
             (request.mostRecent ? " DESC LIMIT 1" : "");
-        queryResolve(statement)
+        queryResolve(statement, conditionValues)
             .then(result => resolve(result))
             .catch(error => reject(error));
     });

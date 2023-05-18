@@ -123,11 +123,15 @@ function refreshBlockchainData(base, flag) {
 
 function readSupernodeConfigFromAPI(base, flag) {
     return new Promise((resolve, reject) => {
-        floBlockchainAPI.readData(floGlobals.SNStorageID, {
-            ignoreOld: base.lastTx[floGlobals.SNStorageID],
-            sentOnly: true,
-            pattern: "SuperNodeStorage"
-        }).then(result => {
+
+        var query_options = { sentOnly: true, pattern: "SuperNodeStorage" };
+        let lastTx = base.lastTx[floGlobals.SNStorageID] ? base.lastTx[floGlobals.SNStorageID] : undefined;
+        if (typeof lastTx == 'string' && /^[0-9a-f]{64}/i.test(lastTx))//lastTx is txid of last tx
+            query_options.after = lastTx;
+        else if (!isNaN(lastTx))//lastTx is tx count (*backward support)
+            query_options.ignoreOld = parseInt(lastTx);
+
+        floBlockchainAPI.readData(floGlobals.SNStorageID, query_options).then(result => {
             let promises = [],
                 node_change = {},
                 node_update = new Set();
@@ -176,7 +180,8 @@ function readSupernodeConfigFromAPI(base, flag) {
                         base.appList[app] = content.addApps[app];
                     };
             });
-            promises.push(DB.setLastTx(floGlobals.SNStorageID, result.totalTxs));
+            promises.push(DB.setLastTx(floGlobals.SNStorageID, result.lastItem));
+            base.lastTx[floGlobals.SNStorageID] = result.lastItem;
             //Check if all save process were successful
             Promise.allSettled(promises).then(results => {
                 if (results.reduce((a, r) => r.status === "rejected" ? ++a : a, 0))
@@ -202,11 +207,15 @@ function readAppSubAdminListFromAPI(base) {
     //Load for each apps
     for (let app in base.appList) {
         promises.push(new Promise((resolve, reject) => {
-            floBlockchainAPI.readData(base.appList[app], {
-                ignoreOld: base.lastTx[base.appList[app]] || 0,
-                sentOnly: true,
-                pattern: app
-            }).then(result => {
+
+            var query_options = { sentOnly: true, pattern: app };
+            let lastTx = base.lastTx[base.appList[app]] ? base.lastTx[base.appList[app]] : undefined;
+            if (typeof lastTx == 'string' && /^[0-9a-f]{64}/i.test(lastTx))//lastTx is txid of last tx
+                query_options.after = lastTx;
+            else if (!isNaN(lastTx))//lastTx is tx count (*backward support)
+                query_options.ignoreOld = parseInt(lastTx);
+
+            floBlockchainAPI.readData(base.appList[app], query_options).then(result => {
                 let subAdmins = new Set(base.appSubAdmins[app]),
                     trustedIDs = new Set(base.appTrustedIDs[app]);
                 result.data.reverse().forEach(data => {
@@ -222,8 +231,9 @@ function readAppSubAdminListFromAPI(base) {
                 });
                 base.appSubAdmins[app] = Array.from(subAdmins);
                 base.appTrustedIDs[app] = Array.from(trustedIDs);
+                base.lastTx[base.appList[app]] = result.lastItem;
                 Promise.allSettled([
-                    DB.setLastTx(base.appList[app], result.totalTxs),
+                    DB.setLastTx(base.appList[app], result.lastItem),
                     DB.setSubAdmin(app, base.appSubAdmins[app]),
                     DB.setTrustedIDs(app, base.appTrustedIDs[app])
                 ]).then(results => {

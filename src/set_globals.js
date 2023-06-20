@@ -15,3 +15,7 @@ try {
 
 if (!process.argv.includes("--debug"))
     global.console.debug = () => null;
+
+process.on('unhandledRejection', (reason, p) => {
+    console.trace('Unhandled Rejection at: Promise', p, 'reason:', reason);
+});

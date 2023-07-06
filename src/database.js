@@ -479,27 +479,28 @@ DB.deleteData = function (snID, vectorClock) {
 DB.clearAuthorisedAppData = function (snID, app, adminID, subAdmins, timestamp) {
     return new Promise((resolve, reject) => {
         let statement = "DELETE FROM _" + snID +
-            " WHERE ( " + H_struct.TIME + "<? AND " +
-            H_struct.APPLICATION + "=? AND " +
-            T_struct.TAG + " IS NULL )" +
-            (subAdmins.length ? " AND ( " +
-                H_struct.RECEIVER_ID + " != ? OR " +
-                H_struct.SENDER_ID + " NOT IN (" + subAdmins.map(a => "?").join(", ") + ") )" :
-                "");
-        queryResolve(statement, [timestamp, app, adminID].concat(subAdmins))
+            " WHERE ( " +
+            H_struct.TIME + " < ? AND " + //data before deleteDelay (ie, 7 days ago)
+            H_struct.APPLICATION + " = ? AND " + //data of this app
+            T_struct.TAG + " IS NULL " +   //tag field is NULL
+            ") AND ( " +
+            H_struct.RECEIVER_ID + " != ? OR " + //receiver is not admin
+            H_struct.SENDER_ID + " NOT IN (?) " +  //sender is not subAdmin
+            ")";
+
+        queryResolve(statement, [timestamp, app, adminID, subAdmins])
             .then(result => resolve(result))
             .catch(error => reject(error));
     });
 };
 
-DB.clearUnauthorisedAppData = function (snID, appList, timestamp) {
+DB.clearUnauthorisedAppData = function (snID, authorisedAppList, timestamp) {
     return new Promise((resolve, reject) => {
         let statement = "DELETE FROM _" + snID +
-            " WHERE " + H_struct.TIME + "<?" +
-            (appList.length ? " AND " +
-                H_struct.APPLICATION + " NOT IN (" + appList.map(a => "?").join(", ") + ")" :
-                "");
-        queryResolve(statement, [timestamp].concat(appList))
+            " WHERE " + H_struct.TIME + " < ? AND" + //data before deleteDelay (ie, 7 days ago)
+            H_struct.APPLICATION + " NOT IN (?)" //app not authorised
+
+        queryResolve(statement, [timestamp, authorisedAppList])
             .then(result => resolve(result))
             .catch(error => reject(error));
     });

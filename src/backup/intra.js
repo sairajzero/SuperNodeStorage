@@ -265,6 +265,9 @@ function reconnectNextNode() {
         .catch(error => {
             //Case: No other node is online
             console.info(error);
+            //close prev node connection if inactive
+            if(_prevNode.id)
+                _prevNode.close();
             //Serve all nodes
             for (let sn in floGlobals.supernodes)
                 DB.createTable(sn)

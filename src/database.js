@@ -454,14 +454,16 @@ DB.storeTag = function (snID, data) {
 };
 
 DB.storeNote = function (snID, data) {
-    let attr = Object.keys(F_struct).map(a => F_struct[a]).concat(L_struct.LOG_TIME);
-    let values = attr.map(a => data[a]).concat(data[H_struct.VECTOR_CLOCK]);
-    let statement = "UPDATE _" + snID +
-        " SET " + attr.map(a => a + "=?").join(", ") +
-        " WHERE " + H_struct.VECTOR_CLOCK + "=?";
-    queryResolve(statement, values)
-        .then(result => resolve(data))
-        .catch(error => reject(error));
+    return new Promise((resolve, reject) => {
+        let attr = Object.keys(F_struct).map(a => F_struct[a]).concat(L_struct.LOG_TIME);
+        let values = attr.map(a => data[a]).concat(data[H_struct.VECTOR_CLOCK]);
+        let statement = "UPDATE _" + snID +
+            " SET " + attr.map(a => a + "=?").join(", ") +
+            " WHERE " + H_struct.VECTOR_CLOCK + "=?";
+        queryResolve(statement, values)
+            .then(result => resolve(data))
+            .catch(error => reject(error));
+    })
 }
 
 DB.deleteData = function (snID, vectorClock) {

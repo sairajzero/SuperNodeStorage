@@ -15,19 +15,19 @@ function processIncomingData(data) {
             return reject(INVALID("Invalid Time"));
         else {
             let process;
-            if ('request' in data) //Request
+            if ('request' in data)      //Request
                 process = processRequestFromUser(data.request);
             else if ('message' in data) //Store data
                 process = processDataFromUser(data);
-            else if ('tag' in data) //Tag data
+            else if ('tag' in data)     //Tag data (tags are added by subAdmins/TrustedIDs)
                 process = processTagFromUser(data);
-            else if ('note' in data)
+            else if ('note' in data)    //Note data (notes are added by receiver)
                 process = processNoteFromUser(data);
+            else if ('edit' in data)    //Comment can be edited by sender anytime with new sign
+                return processEditFromUser(data);
             /*
-            else if (data.edit)
-                return processEditFromUser(gid, uid, data);
-            else if (data.delete)
-                return processDeleteFromUser(gid, uid, data);
+            else if ('delete' in data)
+                return processDeleteFromUser(data);
             */
             else
                 return reject(INVALID("Invalid Data-format"));
@@ -89,6 +89,37 @@ function processRequestFromUser(request) {
             .catch(error => reject(error));
     });
 };
+
+function processEditFromUser(data) {
+    return new Promise((resolve, reject) => {
+        if (!floCrypto.validateAddr(data.receiverID))
+            return reject(INVALID("Invalid receiverID"));
+        let closeNode = cloud.closestNode(data.receiverID);
+        if (!_list.serving.includes(closeNode))
+            return reject(INVALID("Incorrect Supernode"));
+        DB.getData(closeNode, data.vectorClock).then(result => {
+            if (!result.length)
+                return reject(INVALID("Invalid vectorClock"));
+            result = result[0];
+            if (result.senderID !== data.requestorID)
+                return reject(INVALID("Invalid requestorID"));
+            if (!floCrypto.verifyPubKey(data.pubKey, data.requestorID))
+                return reject(INVALID("Invalid pubKey"));
+            let tmp_data = result;
+            tmp_data.comment = data.edit; //edited comment data
+            let hashcontent = ["receiverID", "time", "application", "type", "message", "comment"]
+                .map(d => tmp_data[d]).join("|");
+            if (!floCrypto.verifySign(hashcontent, data.sign, data.pubKey))
+                return reject(INVALID("Invalid signature"));
+            let comment_edit = ([null].includes(data.edit) ? null : data.note.toString()); //if value is null, then comment will be removed (ie, NULL value in SQL)
+            DB.editData(closeNode, data.vectorClock, comment_edit, data.sign).then(rb => {
+                DB.getData(closeNode, data.vectorClock)
+                    .then(result => resolve([result[0], 'EDIT', rb]))
+                    .catch(error => reject(error))
+            }).catch(error => reject(error))
+        }).catch(error => reject(error))
+    })
+}
 
 function processTagFromUser(data) {
     return new Promise((resolve, reject) => {

@@ -38,7 +38,7 @@ module.exports = function Server(port) {
                     res.end(JSON.stringify(result[0])); //result[0] = full data
                     if (result[1]) { //result[1] = mode (ie: DATA/TAG/NOTE)
                         refresher.countdown;
-                        if (['DATA', 'TAG', 'NOTE'].includes(result[1]))
+                        if (['DATA', 'EDIT', 'TAG', 'NOTE'].includes(result[1]))
                             sendToLiveRequests(result[0]);
                         intra.forwardToNextNode(result[1], result[0]);
                     };

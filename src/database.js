@@ -275,6 +275,25 @@ DB.addData = function (snID, data) {
     });
 };
 
+DB.editData = function (snID, vectorClock, comment, newSign) {
+    return new Promise((resolve, reject) => {
+        let data = {
+            [B_struct.COMMENT]: comment,
+            [B_struct.SIGNATURE]: newSign,
+            [L_struct.LOG_TIME]: Date.now()
+        };
+        let attr = Object.keys(data);
+        let values = attr.map(a => data[a]).concat(vectorClock);
+        data[H_struct.VECTOR_CLOCK] = vectorClock; //also add vectorClock to resolve data
+        let statement = "UPDATE _" + snID +
+            " SET " + attr.map(a => a + "=?").join(", ") +
+            " WHERE " + H_struct.VECTOR_CLOCK + "=?";
+        queryResolve(statement, values)
+            .then(result => resolve(data))
+            .catch(error => reject(error));
+    })
+};
+
 DB.getData = function (snID, vectorClock) {
     return new Promise((resolve, reject) => {
         let statement = "SELECT * FROM _" + snID +
@@ -325,7 +344,7 @@ DB.noteData = function (snID, vectorClock, note, noteTime, noteKey, noteSign) {
             .then(result => resolve(data))
             .catch(error => reject(error));
     });
-}
+};
 
 DB.searchData = function (snID, request) {
     return new Promise((resolve, reject) => {
@@ -440,6 +459,18 @@ DB.storeData = function (snID, data, updateLogTime = false) {
     });
 };
 
+DB.storeEdit = function (snID, data) {
+    let attr = [B_struct.COMMENT, B_struct.SIGNATURE, L_struct.LOG_TIME];
+    let values = attr.map(a => data[a]).concat(data[H_struct.VECTOR_CLOCK]);
+    let statement = "UPDATE _" + snID +
+        " SET " + attr.map(a => a + "=?").join(", ") +
+        " WHERE " + H_struct.VECTOR_CLOCK + "=?";
+    queryResolve(statement, values)
+        .then(result => resolve(data))
+        .catch(error => reject(error));
+
+};
+
 DB.storeTag = function (snID, data) {
     return new Promise((resolve, reject) => {
         let attr = Object.keys(T_struct).map(a => T_struct[a]).concat(L_struct.LOG_TIME);
@@ -464,7 +495,7 @@ DB.storeNote = function (snID, data) {
             .then(result => resolve(data))
             .catch(error => reject(error));
     })
-}
+};
 
 DB.deleteData = function (snID, vectorClock) {
     return new Promise((resolve, reject) => {

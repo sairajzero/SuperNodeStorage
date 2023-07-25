@@ -114,7 +114,7 @@ function processEditFromUser(data) {
                 .map(d => tmp_data[d]).join("|");
             if (!floCrypto.verifySign(hashcontent, data.re_sign, data.pubKey))
                 return reject(INVALID("Invalid re-signature"));
-            let comment_edit = ([null].includes(data.edit) ? null : data.note.toString()); //if value is null, then comment will be removed (ie, NULL value in SQL)
+            let comment_edit = ([null].includes(data.edit) ? null : data.edit.toString()); //if value is null, then comment will be removed (ie, NULL value in SQL)
             DB.editData(closeNode, data.vectorClock, comment_edit, data.re_sign).then(rb => {
                 DB.getData(closeNode, data.vectorClock)
                     .then(result => resolve([result[0], 'EDIT', rb]))

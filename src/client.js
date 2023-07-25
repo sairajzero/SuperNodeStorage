@@ -24,10 +24,10 @@ function processIncomingData(data) {
             else if ('note' in data)    //Note data (notes are added by receiver)
                 process = processNoteFromUser(data);
             else if ('edit' in data)    //Comment can be edited by sender anytime with new sign
-                return processEditFromUser(data);
+                process = processEditFromUser(data);
             /*
             else if ('delete' in data)
-                return processDeleteFromUser(data);
+                process = processDeleteFromUser(data);
             */
             else
                 return reject(INVALID("Invalid Data-format"));

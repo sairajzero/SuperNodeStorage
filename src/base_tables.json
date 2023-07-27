@@ -1,7 +1,7 @@
 {
     "LastTxs": {
         "ID": "CHAR(34) NOT NULL",
-        "N": "INT NOT NULL",
+        "N": "VARCHAR(128) NOT NULL",
         "PRIMARY": "KEY (ID)"
     },
     "Configs": {

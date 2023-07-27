@@ -143,6 +143,8 @@ function processTaskFromPrevNode(packet) {
                     orderBackup(task.order); break;
                 case TYPE_.STORE_BACKUP_DATA:
                     storeBackupData(task.data, from, packet); break;
+                case TYPE_.EDIT_BACKUP_DATA:
+                    editBackupData(task.data, from, packet); break;
                 case TYPE_.TAG_BACKUP_DATA:
                     tagBackupData(task.data, from, packet); break;
                 case TYPE_.NOTE_BACKUP_DATA:
@@ -265,6 +267,9 @@ function reconnectNextNode() {
         .catch(error => {
             //Case: No other node is online
             console.info(error);
+            //close prev node connection if inactive
+            if (_prevNode.id)
+                _prevNode.close();
             //Serve all nodes
             for (let sn in floGlobals.supernodes)
                 DB.createTable(sn)
@@ -310,6 +315,16 @@ function storeBackupData(data, from, packet) {
     let closestNode = cloud.closestNode(data.receiverID);
     if (_list.stored.includes(closestNode)) {
         DB.storeData(closestNode, data).then(_ => null).catch(e => console.error(e));
+        if (_list[closestNode] < floGlobals.sn_config.backupDepth && _nextNode.id !== from)
+            _nextNode.send(packet);
+    };
+};
+
+//Edit (backup) data
+function editBackupData(data, from, packet) {
+    let closestNode = cloud.closestNode(data.receiverID);
+    if (_list.stored.includes(closestNode)) {
+        DB.storeEdit(closestNode, data).then(_ => null).catch(e => console.error(e));
         if (_list[closestNode] < floGlobals.sn_config.backupDepth && _nextNode.id !== from)
             _nextNode.send(packet);
     };
@@ -366,6 +381,7 @@ function forwardToNextNode(mode, data) {
     var modeMap = {
         'TAG': TYPE_.TAG_BACKUP_DATA,
         'NOTE': TYPE_.NOTE_BACKUP_DATA,
+        'EDIT': TYPE_.EDIT_BACKUP_DATA,
         'DATA': TYPE_.STORE_BACKUP_DATA
     };
     if (mode in modeMap && _nextNode.id)

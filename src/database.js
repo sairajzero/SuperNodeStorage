@@ -275,6 +275,25 @@ DB.addData = function (snID, data) {
     });
 };
 
+DB.editData = function (snID, vectorClock, comment, newSign) {
+    return new Promise((resolve, reject) => {
+        let data = {
+            [B_struct.COMMENT]: comment,
+            [B_struct.SIGNATURE]: newSign,
+            [L_struct.LOG_TIME]: Date.now()
+        };
+        let attr = Object.keys(data);
+        let values = attr.map(a => data[a]).concat(vectorClock);
+        data[H_struct.VECTOR_CLOCK] = vectorClock; //also add vectorClock to resolve data
+        let statement = "UPDATE _" + snID +
+            " SET " + attr.map(a => a + "=?").join(", ") +
+            " WHERE " + H_struct.VECTOR_CLOCK + "=?";
+        queryResolve(statement, values)
+            .then(result => resolve(data))
+            .catch(error => reject(error));
+    })
+};
+
 DB.getData = function (snID, vectorClock) {
     return new Promise((resolve, reject) => {
         let statement = "SELECT * FROM _" + snID +
@@ -325,36 +344,53 @@ DB.noteData = function (snID, vectorClock, note, noteTime, noteKey, noteSign) {
             .then(result => resolve(data))
             .catch(error => reject(error));
     });
-}
+};
 
 DB.searchData = function (snID, request) {
     return new Promise((resolve, reject) => {
-        let conditionArr = [];
+        let conditionArr = [], conditionValues = [];
         if (request.lowerVectorClock || request.upperVectorClock || request.atVectorClock) {
-            if (request.atVectorClock)
-                conditionArr.push(`${H_struct.VECTOR_CLOCK} = '${request.atVectorClock}'`);
-            else if (request.lowerVectorClock && request.upperVectorClock)
-                conditionArr.push(`${H_struct.VECTOR_CLOCK} BETWEEN '${request.lowerVectorClock}' AND '${request.upperVectorClock}'`);
-            else if (request.lowerVectorClock)
-                conditionArr.push(`${H_struct.VECTOR_CLOCK} >= '${request.lowerVectorClock}'`);
-            else if (request.upperVectorClock)
-                conditionArr.push(`${H_struct.VECTOR_CLOCK} <= '${request.upperVectorClock}'`);
+            if (request.atVectorClock) {
+                conditionArr.push(`${H_struct.VECTOR_CLOCK} = ?`);
+                conditionValues.push(request.atVectorClock);
+            } else if (request.lowerVectorClock && request.upperVectorClock) {
+                conditionArr.push(`(${H_struct.VECTOR_CLOCK} BETWEEN ? AND ?)`);
+                conditionValues.push(request.lowerVectorClock);
+                conditionValues.push(request.upperVectorClock);
+            } else if (request.lowerVectorClock) {
+                conditionArr.push(`${H_struct.VECTOR_CLOCK} >= ?`);
+                conditionValues.push(request.lowerVectorClock);
+            } else if (request.upperVectorClock) {
+                conditionArr.push(`${H_struct.VECTOR_CLOCK} <= ?`);
+                conditionValues.push(request.upperVectorClock);
+            }
         }
-        if (request.afterTime)
-            conditionArr.push(`${L_struct.LOG_TIME} > ${request.afterTime}`);
-        conditionArr.push(`${H_struct.APPLICATION} = '${request.application}'`);
-        conditionArr.push(`IFNULL(${L_struct.PROXY_ID}, ${H_struct.RECEIVER_ID}) = '${cloud.proxyID(request.receiverID)}'`);
-        if (request.comment)
-            conditionArr.push(`${B_struct.COMMENT} = '${request.comment}'`);
-        if (request.type)
-            conditionArr.push(`${H_struct.TYPE} = '${request.type}'`);
+        if (request.afterTime) {
+            conditionArr.push(`${L_struct.LOG_TIME} > ?`);
+            conditionValues.push(request.afterTime);
+        }
+        conditionArr.push(`${H_struct.APPLICATION} = ?`);
+        conditionValues.push(request.application);
+        conditionArr.push(`IFNULL(${L_struct.PROXY_ID}, ${H_struct.RECEIVER_ID}) = ?`);
+        conditionValues.push(cloud.proxyID(request.receiverID));
+        if (request.comment) {
+            conditionArr.push(`${B_struct.COMMENT} = ?`);
+            conditionValues.push(request.comment);
+        }
+        if (request.type) {
+            conditionArr.push(`${H_struct.TYPE} = ?`);
+            conditionValues.push(request.type);
+        }
         if (request.senderID) {
             if (typeof request.senderID === "string" && request.senderID.includes(','))
                 request.senderID = request.senderID.split(',');
-            if (Array.isArray(request.senderID))
-                conditionArr.push(`${H_struct.SENDER_ID} IN ('${request.senderID.join("', '")}')`);
-            else
-                conditionArr.push(`${H_struct.SENDER_ID} = '${request.senderID}'`);
+            if (Array.isArray(request.senderID)) {
+                conditionArr.push(`${H_struct.SENDER_ID} IN (?)`);
+                conditionValues.push(request.senderID);
+            } else {
+                conditionArr.push(`${H_struct.SENDER_ID} = ?`);
+                conditionValues.push(request.senderID);
+            }
         };
         //console.log(conditionArr);
         //let attr = Object.keys(H_struct).map(a => H_struct[a]).concat(Object.keys(B_struct).map(a => B_struct[a]));
@@ -363,7 +399,7 @@ DB.searchData = function (snID, request) {
             " WHERE " + conditionArr.join(" AND ") +
             " ORDER BY " + (request.afterTime ? L_struct.LOG_TIME : H_struct.VECTOR_CLOCK) +
             (request.mostRecent ? " DESC LIMIT 1" : "");
-        queryResolve(statement)
+        queryResolve(statement, conditionValues)
             .then(result => resolve(result))
             .catch(error => reject(error));
     });
@@ -423,6 +459,18 @@ DB.storeData = function (snID, data, updateLogTime = false) {
     });
 };
 
+DB.storeEdit = function (snID, data) {
+    let attr = [B_struct.COMMENT, B_struct.SIGNATURE, L_struct.LOG_TIME];
+    let values = attr.map(a => data[a]).concat(data[H_struct.VECTOR_CLOCK]);
+    let statement = "UPDATE _" + snID +
+        " SET " + attr.map(a => a + "=?").join(", ") +
+        " WHERE " + H_struct.VECTOR_CLOCK + "=?";
+    queryResolve(statement, values)
+        .then(result => resolve(data))
+        .catch(error => reject(error));
+
+};
+
 DB.storeTag = function (snID, data) {
     return new Promise((resolve, reject) => {
         let attr = Object.keys(T_struct).map(a => T_struct[a]).concat(L_struct.LOG_TIME);
@@ -437,15 +485,17 @@ DB.storeTag = function (snID, data) {
 };
 
 DB.storeNote = function (snID, data) {
-    let attr = Object.keys(F_struct).map(a => F_struct[a]).concat(L_struct.LOG_TIME);
-    let values = attr.map(a => data[a]).concat(data[H_struct.VECTOR_CLOCK]);
-    let statement = "UPDATE _" + snID +
-        " SET " + attr.map(a => a + "=?").join(", ") +
-        " WHERE " + H_struct.VECTOR_CLOCK + "=?";
-    queryResolve(statement, values)
-        .then(result => resolve(data))
-        .catch(error => reject(error));
-}
+    return new Promise((resolve, reject) => {
+        let attr = Object.keys(F_struct).map(a => F_struct[a]).concat(L_struct.LOG_TIME);
+        let values = attr.map(a => data[a]).concat(data[H_struct.VECTOR_CLOCK]);
+        let statement = "UPDATE _" + snID +
+            " SET " + attr.map(a => a + "=?").join(", ") +
+            " WHERE " + H_struct.VECTOR_CLOCK + "=?";
+        queryResolve(statement, values)
+            .then(result => resolve(data))
+            .catch(error => reject(error));
+    })
+};
 
 DB.deleteData = function (snID, vectorClock) {
     return new Promise((resolve, reject) => {
@@ -462,27 +512,28 @@ DB.deleteData = function (snID, vectorClock) {
 DB.clearAuthorisedAppData = function (snID, app, adminID, subAdmins, timestamp) {
     return new Promise((resolve, reject) => {
         let statement = "DELETE FROM _" + snID +
-            " WHERE ( " + H_struct.TIME + "<? AND " +
-            H_struct.APPLICATION + "=? AND " +
-            T_struct.TAG + " IS NULL )" +
-            (subAdmins.length ? " AND ( " +
-                H_struct.RECEIVER_ID + " != ? OR " +
-                H_struct.SENDER_ID + " NOT IN (" + subAdmins.map(a => "?").join(", ") + ") )" :
-                "");
-        queryResolve(statement, [timestamp, app, adminID].concat(subAdmins))
+            " WHERE ( " +
+            H_struct.TIME + " < ? AND " + //data before deleteDelay (ie, 7 days ago)
+            H_struct.APPLICATION + " = ? AND " + //data of this app
+            T_struct.TAG + " IS NULL " +   //tag field is NULL
+            ") AND ( " +
+            H_struct.RECEIVER_ID + " != ? OR " + //receiver is not admin
+            H_struct.SENDER_ID + " NOT IN (?) " +  //sender is not subAdmin
+            ")";
+
+        queryResolve(statement, [timestamp, app, adminID, subAdmins])
             .then(result => resolve(result))
             .catch(error => reject(error));
     });
 };
 
-DB.clearUnauthorisedAppData = function (snID, appList, timestamp) {
+DB.clearUnauthorisedAppData = function (snID, authorisedAppList, timestamp) {
     return new Promise((resolve, reject) => {
         let statement = "DELETE FROM _" + snID +
-            " WHERE " + H_struct.TIME + "<?" +
-            (appList.length ? " AND " +
-                H_struct.APPLICATION + " NOT IN (" + appList.map(a => "?").join(", ") + ")" :
-                "");
-        queryResolve(statement, [timestamp].concat(appList))
+            " WHERE " + H_struct.TIME + " < ? AND" + //data before deleteDelay (ie, 7 days ago)
+            H_struct.APPLICATION + " NOT IN (?)" //app not authorised
+
+        queryResolve(statement, [timestamp, authorisedAppList])
             .then(result => resolve(result))
             .catch(error => reject(error));
     });
